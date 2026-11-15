@@ -1,0 +1,146 @@
+<script setup lang="ts">
+/**
+ * Vista Standalone: Listado De Clases (Informes)
+ *
+ * Propósito: Listado detallado y cronológico de todas las sesiones de clase
+ * programadas en la institución con filtros por día de la semana.
+ */
+import { ref } from 'vue';
+import { Head, Link, router } from '@inertiajs/vue3';
+import { route } from 'ziggy-js';
+import AppLayout from '@/layouts/AppLayout.vue';
+import { Button } from '@/components/ui/button';
+import Badge from '@/components/ui/badge/Badge.vue';
+import {
+    Calendar,
+    Printer,
+    School,
+    UserCheck,
+    Layers,
+    BookOpen,
+} from 'lucide-vue-next';
+
+const props = defineProps<{
+    clases: {
+        data: any[];
+        total: number;
+    };
+    filters: {
+        dia?: string | number;
+    };
+}>();
+
+const diaFiltro = ref(props.filters.dia ?? '');
+
+const filtrarDia = () => {
+    router.get(route('informes.clases'), { dia: diaFiltro.value || undefined }, { preserveState: true });
+};
+
+const diasSemana = ['', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+
+const imprimir = () => {
+    window.print();
+};
+</script>
+
+<template>
+    <AppLayout :breadcrumbs="[
+        { title: 'Programación Académica', href: route('seccion.index') },
+        { title: 'Informes', href: route('informes.secciones') },
+        { title: 'Listado De Clases', href: route('informes.clases') },
+    ]">
+        <Head title="Listado De Clases - SOGAC" />
+
+        <div class="space-y-6 p-4 md:p-8 max-w-7xl mx-auto">
+            <!-- CABECERA -->
+            <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b pb-4 print:hidden">
+                <div>
+                    <div class="flex items-center gap-2">
+                        <div class="p-2 bg-blue-500/10 rounded-lg text-blue-600">
+                            <Calendar class="h-6 w-6" />
+                        </div>
+                        <h1 class="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
+                            Listado General de Clases Programadas
+                        </h1>
+                    </div>
+                    <p class="text-sm text-muted-foreground mt-1">
+                        Reporte consolidado de bloques horarios, aulas asignadas y docentes por día.
+                    </p>
+                </div>
+
+                <div class="flex items-center gap-2">
+                    <select
+                        v-model="diaFiltro"
+                        class="h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                        @change="filtrarDia"
+                    >
+                        <option value="">Todos los Días</option>
+                        <option value="1">Lunes</option>
+                        <option value="2">Martes</option>
+                        <option value="3">Miércoles</option>
+                        <option value="4">Jueves</option>
+                        <option value="5">Viernes</option>
+                        <option value="6">Sábado</option>
+                    </select>
+
+                    <Button variant="outline" @click="imprimir">
+                        <Printer class="h-4 w-4 mr-2" />
+                        Imprimir
+                    </Button>
+                </div>
+            </div>
+
+            <!-- TABLA DE CLASES -->
+            <div class="bg-card border rounded-xl overflow-hidden shadow-xs">
+                <table class="w-full text-sm text-left">
+                    <thead class="bg-muted/50 border-b text-xs font-semibold text-muted-foreground uppercase">
+                        <tr>
+                            <th class="p-4">Día / Horario</th>
+                            <th class="p-4">Materia / Unidad Curricular</th>
+                            <th class="p-4">Sección</th>
+                            <th class="p-4">Profesor Asignado</th>
+                            <th class="p-4">Espacio / Aula</th>
+                            <th class="p-4 text-center">Tipo Sesión</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y">
+                        <tr v-for="c in props.clases.data" :key="c.id_sho" class="hover:bg-muted/30">
+                            <td class="p-4 font-mono font-medium">
+                                <span class="font-bold text-foreground">{{ diasSemana[c.dia_semana] }}</span>
+                                <div class="text-xs text-muted-foreground">{{ c.hora_inicio }} - {{ c.hora_fin }}</div>
+                            </td>
+                            <td class="p-4">
+                                <div class="font-semibold text-slate-900 dark:text-slate-100">
+                                    {{ c.seccion_unidad_docente?.malla_curricular_detalle?.unidad_curricular?.nombre_ucu || 'Materia' }}
+                                </div>
+                                <div class="text-xs text-muted-foreground font-mono">
+                                    {{ c.seccion_unidad_docente?.malla_curricular_detalle?.unidad_curricular?.codigo_ucu || 'S/C' }}
+                                </div>
+                            </td>
+                            <td class="p-4 font-medium">
+                                {{ c.seccion_unidad_docente?.seccion?.nombre_sec || 'N/A' }}
+                            </td>
+                            <td class="p-4 text-muted-foreground">
+                                {{ c.seccion_unidad_docente?.docente?.name || 'Por Asignar' }}
+                            </td>
+                            <td class="p-4 font-semibold text-primary">
+                                {{ c.aula?.nombre_aul || 'Aula' }}
+                            </td>
+                            <td class="p-4 text-center">
+                                <Badge variant="outline" class="text-xs">
+                                    {{ c.tipo_sesion || 'Teoría' }}
+                                </Badge>
+                            </td>
+                        </tr>
+                        <tr v-if="props.clases.data.length === 0">
+                            <td colspan="6" class="p-8 text-center text-muted-foreground text-sm">
+                                No se encontraron clases programadas para el criterio seleccionado.
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </AppLayout>
+</template>
+

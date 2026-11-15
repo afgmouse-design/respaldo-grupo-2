@@ -1,0 +1,190 @@
+<script setup lang="ts">
+/**
+ * Vista Standalone: Editar Aula (Programación Académica).
+ *
+ * Propósito: Modificación de un aula existente mediante navegación directa SPA.
+ */
+import { Head, Link, useForm } from '@inertiajs/vue3';
+import { route } from 'ziggy-js';
+import AppLayout from '@/layouts/AppLayout.vue';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
+import type { BreadcrumbItem } from '@/types/navigation';
+import { ArrowLeft, Save, School } from 'lucide-vue-next';
+
+const props = defineProps<{
+    aula: {
+        id_aul: number;
+        codigo_aula_aul: string;
+        capacidad_maxima_aul: number;
+        tipo_espacio_aul?: string | null;
+        sed_id: number;
+        tia_id: number;
+        status?: boolean;
+    };
+    sedes: Array<{ id_sed: number; nombre_sed: string }>;
+    tiposAula: Array<{ id_tia: number; nombre_tia: string }>;
+}>();
+
+const breadcrumbs: BreadcrumbItem[] = [
+    { title: 'Dashboard', subtitle: 'Panel Principal', href: route('dashboard') },
+    { title: 'Programación Académica', subtitle: 'Maestros', href: '#' },
+    { title: 'Aulas', subtitle: 'Listado', href: route('aula.index') },
+    { title: 'Editar Aula', subtitle: 'Actualización', href: route('aula.edit', props.aula.id_aul) },
+];
+
+const form = useForm({
+    codigo_aula_aul: props.aula.codigo_aula_aul || '',
+    capacidad_maxima_aul: props.aula.capacidad_maxima_aul || 30,
+    tipo_espacio_aul: props.aula.tipo_espacio_aul || '',
+    sed_id: props.aula.sed_id || '',
+    tia_id: props.aula.tia_id || '',
+});
+
+const submit = () => {
+    form.put(route('aula.update', props.aula.id_aul), {
+        preserveScroll: true,
+    });
+};
+</script>
+
+<template>
+    <AppLayout :breadcrumbs="breadcrumbs">
+        <Head :title="`Editar Aula: ${aula.codigo_aula_aul} - Programación Académica`" />
+
+        <div class="w-full px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+            <div class="flex items-center justify-between border-b pb-4 dark:border-slate-800">
+                <div class="space-y-1">
+                    <div class="flex items-center gap-2">
+                        <Button as-child variant="ghost" size="icon" class="h-8 w-8 text-muted-foreground hover:text-foreground">
+                            <Link :href="route('aula.index')">
+                                <ArrowLeft class="h-4 w-4" />
+                            </Link>
+                        </Button>
+                        <h1 class="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
+                            Editar Aula
+                        </h1>
+                    </div>
+                    <p class="text-sm text-muted-foreground ml-10">
+                        Modifique la asignación y características del aula.
+                    </p>
+                </div>
+            </div>
+
+            <Card class="border-slate-200 dark:border-slate-800 shadow-xs max-w-4xl mx-auto">
+                <CardHeader>
+                    <div class="flex items-center gap-2">
+                        <School class="h-5 w-5 text-primary" />
+                        <CardTitle class="text-lg font-semibold">Datos del Aula #{{ aula.id_aul }}</CardTitle>
+                    </div>
+                    <CardDescription>
+                        Actualice los datos operativos del aula.
+                    </CardDescription>
+                </CardHeader>
+
+                <form @submit.prevent="submit">
+                    <CardContent class="space-y-6">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div class="space-y-2">
+                                <Label for="sed_id">
+                                    Sede Universitaria <span class="text-destructive">*</span>
+                                </Label>
+                                <select
+                                    id="sed_id"
+                                    v-model="form.sed_id"
+                                    class="w-full h-10 rounded-md border border-input bg-background px-3 text-sm focus:outline-hidden focus:ring-2 focus:ring-ring"
+                                    :class="{ 'border-destructive': form.errors.sed_id }"
+                                >
+                                    <option value="" disabled>Seleccione una sede...</option>
+                                    <option v-for="s in sedes" :key="s.id_sed" :value="s.id_sed">
+                                        {{ s.nombre_sed }}
+                                    </option>
+                                </select>
+                                <span v-if="form.errors.sed_id" class="text-xs text-destructive">
+                                    {{ form.errors.sed_id }}
+                                </span>
+                            </div>
+
+                            <div class="space-y-2">
+                                <Label for="tia_id">
+                                    Tipo de Aula <span class="text-destructive">*</span>
+                                </Label>
+                                <select
+                                    id="tia_id"
+                                    v-model="form.tia_id"
+                                    class="w-full h-10 rounded-md border border-input bg-background px-3 text-sm focus:outline-hidden focus:ring-2 focus:ring-ring"
+                                    :class="{ 'border-destructive': form.errors.tia_id }"
+                                >
+                                    <option value="" disabled>Seleccione el tipo de ambiente...</option>
+                                    <option v-for="t in tiposAula" :key="t.id_tia" :value="t.id_tia">
+                                        {{ t.nombre_tia }}
+                                    </option>
+                                </select>
+                                <span v-if="form.errors.tia_id" class="text-xs text-destructive">
+                                    {{ form.errors.tia_id }}
+                                </span>
+                            </div>
+
+                            <div class="space-y-2">
+                                <Label for="codigo_aula_aul">
+                                    Código del Aula <span class="text-destructive">*</span>
+                                </Label>
+                                <Input
+                                    id="codigo_aula_aul"
+                                    v-model="form.codigo_aula_aul"
+                                    type="text"
+                                    :class="{ 'border-destructive': form.errors.codigo_aula_aul }"
+                                />
+                                <span v-if="form.errors.codigo_aula_aul" class="text-xs text-destructive">
+                                    {{ form.errors.codigo_aula_aul }}
+                                </span>
+                            </div>
+
+                            <div class="space-y-2">
+                                <Label for="capacidad_maxima_aul">
+                                    Capacidad Máxima <span class="text-destructive">*</span>
+                                </Label>
+                                <Input
+                                    id="capacidad_maxima_aul"
+                                    v-model="form.capacidad_maxima_aul"
+                                    type="number"
+                                    min="1"
+                                    :class="{ 'border-destructive': form.errors.capacidad_maxima_aul }"
+                                />
+                                <span v-if="form.errors.capacidad_maxima_aul" class="text-xs text-destructive">
+                                    {{ form.errors.capacidad_maxima_aul }}
+                                </span>
+                            </div>
+
+                            <div class="space-y-2 md:col-span-2">
+                                <Label for="tipo_espacio_aul">Tipo de Espacio / Ubicación</Label>
+                                <Input
+                                    id="tipo_espacio_aul"
+                                    v-model="form.tipo_espacio_aul"
+                                    type="text"
+                                    :class="{ 'border-destructive': form.errors.tipo_espacio_aul }"
+                                />
+                                <span v-if="form.errors.tipo_espacio_aul" class="text-xs text-destructive">
+                                    {{ form.errors.tipo_espacio_aul }}
+                                </span>
+                            </div>
+                        </div>
+                    </CardContent>
+
+                    <CardFooter class="flex justify-end gap-3 border-t border-slate-100 dark:border-slate-800/60 pt-4">
+                        <Button as-child variant="outline" :disabled="form.processing">
+                            <Link :href="route('aula.index')">Cancelar</Link>
+                        </Button>
+                        <Button type="submit" :disabled="form.processing" class="gap-2">
+                            <Save class="h-4 w-4" />
+                            <span>{{ form.processing ? 'Actualizando...' : 'Guardar Cambios' }}</span>
+                        </Button>
+                    </CardFooter>
+                </form>
+            </Card>
+        </div>
+    </AppLayout>
+</template>
+
