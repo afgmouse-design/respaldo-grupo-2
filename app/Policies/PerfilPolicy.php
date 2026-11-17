@@ -2,65 +2,44 @@
 
 namespace App\Policies;
 
-use App\Models\Perfil;
+use App\Models\Personas\Perfil;
 use App\Models\User;
-use Illuminate\Auth\Access\Response;
+use App\Policies\Concerns\AuthorizesConPermiso;
+use Illuminate\Auth\Access\HandlesAuthorization;
 
+/**
+ * Policy: Autorización para el catálogo de Perfiles (`perfil`).
+ *
+ * Historial:
+ *  - 2026-11-14: Apuntado al modelo oficial `App\Models\Personas\Perfil` y al trait `AuthorizesConPermiso`.
+ */
 class PerfilPolicy
 {
-    /**
-     * Determine whether the user can view any models.
-     */
-    public function viewAny(User $user): bool
+    use HandlesAuthorization;
+    use AuthorizesConPermiso;
+
+    public function viewAny(?User $user): bool
     {
-        return false;
+        return $this->permiso($user, 'perfil.ver');
     }
 
-    /**
-     * Determine whether the user can view the model.
-     */
-    public function view(User $user, Perfil $perfil): bool
+    public function view(?User $user, ?Perfil $perfil = null): bool
     {
-        return false;
+        return $this->permiso($user, 'perfil.ver');
     }
 
-    /**
-     * Determine whether the user can create models.
-     */
-    public function create(User $user): bool
+    public function create(?User $user): bool
     {
-        return false;
+        return $this->permiso($user, 'perfil.crear');
     }
 
-    /**
-     * Determine whether the user can update the model.
-     */
-    public function update(User $user, Perfil $perfil): bool
+    public function update(?User $user, ?Perfil $perfil = null): bool
     {
-        return false;
+        return $this->permiso($user, 'perfil.editar');
     }
 
-    /**
-     * Determine whether the user can delete the model.
-     */
-    public function delete(User $user, Perfil $perfil): bool
+    public function delete(?User $user, ?Perfil $perfil = null): bool
     {
-        return false;
-    }
-
-    /**
-     * Determine whether the user can restore the model.
-     */
-    public function restore(User $user, Perfil $perfil): bool
-    {
-        return false;
-    }
-
-    /**
-     * Determine whether the user can permanently delete the model.
-     */
-    public function forceDelete(User $user, Perfil $perfil): bool
-    {
-        return false;
+        return $this->permiso($user, 'perfil.eliminar');
     }
 }

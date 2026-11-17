@@ -3,10 +3,14 @@
  * Vista Standalone: Listado De Clases (Informes)
  *
  * Propósito: Listado detallado y cronológico de todas las sesiones de clase
- * programadas en la institución con filtros por día de la semana.
+ * programadas en `horario` + `carga_academica` con filtros por día de la semana.
+ *
+ * Historial:
+ *  - 2026-11-15: Alineado a `horario(id_hor, dia_semana_hor, hora_inicio_hor, hora_fin_hor, tipo_sesion_hor)`,
+ *    `carga_academica`, `unidad_curricular` (`nombre_unc`, `codigo_unc`), `docente_perfil.persona` y `aula.codigo_aula_aul`.
  */
 import { ref } from 'vue';
-import { Head, Link, router } from '@inertiajs/vue3';
+import { Head, router } from '@inertiajs/vue3';
 import { route } from 'ziggy-js';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { Button } from '@/components/ui/button';
@@ -14,11 +18,15 @@ import Badge from '@/components/ui/badge/Badge.vue';
 import {
     Calendar,
     Printer,
-    School,
-    UserCheck,
-    Layers,
-    BookOpen,
 } from 'lucide-vue-next';
+import {
+    formatearHoraCorta,
+    obtenerAulaEtiqueta,
+    obtenerCodigoMateriaHorario,
+    obtenerNombreDocenteCarga,
+    obtenerNombreMateriaHorario,
+    obtenerSeccionHorario,
+} from '@/lib/academico';
 
 const props = defineProps<{
     clases: {
@@ -36,8 +44,6 @@ const filtrarDia = () => {
     router.get(route('informes.clases'), { dia: diaFiltro.value || undefined }, { preserveState: true });
 };
 
-const diasSemana = ['', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
-
 const imprimir = () => {
     window.print();
 };
@@ -45,14 +51,13 @@ const imprimir = () => {
 
 <template>
     <AppLayout :breadcrumbs="[
-        { title: 'Programación Académica', href: route('seccion.index') },
-        { title: 'Informes', href: route('informes.secciones') },
-        { title: 'Listado De Clases', href: route('informes.clases') },
+        { title: 'Programación Académica', subtitle: 'Secciones', href: route('seccion.index') },
+        { title: 'Informes', subtitle: 'Programación', href: route('informes.secciones') },
+        { title: 'Listado De Clases', subtitle: 'Clases Programadas', href: route('informes.clases') },
     ]">
         <Head title="Listado De Clases - SOGAC" />
 
         <div class="space-y-6 p-4 md:p-8 max-w-7xl mx-auto">
-            <!-- CABECERA -->
             <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b pb-4 print:hidden">
                 <div>
                     <div class="flex items-center gap-2">
@@ -75,12 +80,12 @@ const imprimir = () => {
                         @change="filtrarDia"
                     >
                         <option value="">Todos los Días</option>
-                        <option value="1">Lunes</option>
-                        <option value="2">Martes</option>
-                        <option value="3">Miércoles</option>
-                        <option value="4">Jueves</option>
-                        <option value="5">Viernes</option>
-                        <option value="6">Sábado</option>
+                        <option value="Lunes">Lunes</option>
+                        <option value="Martes">Martes</option>
+                        <option value="Miercoles">Miércoles</option>
+                        <option value="Jueves">Jueves</option>
+                        <option value="Viernes">Viernes</option>
+                        <option value="Sabado">Sábado</option>
                     </select>
 
                     <Button variant="outline" @click="imprimir">
@@ -90,7 +95,6 @@ const imprimir = () => {
                 </div>
             </div>
 
-            <!-- TABLA DE CLASES -->
             <div class="bg-card border rounded-xl overflow-hidden shadow-xs">
                 <table class="w-full text-sm text-left">
                     <thead class="bg-muted/50 border-b text-xs font-semibold text-muted-foreground uppercase">
@@ -104,31 +108,33 @@ const imprimir = () => {
                         </tr>
                     </thead>
                     <tbody class="divide-y">
-                        <tr v-for="c in props.clases.data" :key="c.id_sho" class="hover:bg-muted/30">
+                        <tr v-for="c in props.clases.data" :key="c.id_hor ?? c.id_sho" class="hover:bg-muted/30">
                             <td class="p-4 font-mono font-medium">
-                                <span class="font-bold text-foreground">{{ diasSemana[c.dia_semana] }}</span>
-                                <div class="text-xs text-muted-foreground">{{ c.hora_inicio }} - {{ c.hora_fin }}</div>
+                                <span class="font-bold text-foreground">{{ c.dia_semana_hor ?? c.dia_semana }}</span>
+                                <div class="text-xs text-muted-foreground">
+                                    {{ formatearHoraCorta(c.hora_inicio_hor ?? c.hora_inicio) }} - {{ formatearHoraCorta(c.hora_fin_hor ?? c.hora_fin) }}
+                                </div>
                             </td>
                             <td class="p-4">
                                 <div class="font-semibold text-slate-900 dark:text-slate-100">
-                                    {{ c.seccion_unidad_docente?.malla_curricular_detalle?.unidad_curricular?.nombre_ucu || 'Materia' }}
+                                    {{ obtenerNombreMateriaHorario(c) }}
                                 </div>
                                 <div class="text-xs text-muted-foreground font-mono">
-                                    {{ c.seccion_unidad_docente?.malla_curricular_detalle?.unidad_curricular?.codigo_ucu || 'S/C' }}
+                                    {{ obtenerCodigoMateriaHorario(c) }}
                                 </div>
                             </td>
                             <td class="p-4 font-medium">
-                                {{ c.seccion_unidad_docente?.seccion?.nombre_sec || 'N/A' }}
+                                {{ obtenerSeccionHorario(c) }}
                             </td>
                             <td class="p-4 text-muted-foreground">
-                                {{ c.seccion_unidad_docente?.docente?.name || 'Por Asignar' }}
+                                {{ obtenerNombreDocenteCarga(c.carga_academica ?? c.seccion_unidad_docente) }}
                             </td>
                             <td class="p-4 font-semibold text-primary">
-                                {{ c.aula?.nombre_aul || 'Aula' }}
+                                {{ obtenerAulaEtiqueta(c.aula) }}
                             </td>
                             <td class="p-4 text-center">
                                 <Badge variant="outline" class="text-xs">
-                                    {{ c.tipo_sesion || 'Teoría' }}
+                                    {{ c.tipo_sesion_hor || c.tipo_sesion || 'Teoría' }}
                                 </Badge>
                             </td>
                         </tr>
@@ -143,4 +149,3 @@ const imprimir = () => {
         </div>
     </AppLayout>
 </template>
-

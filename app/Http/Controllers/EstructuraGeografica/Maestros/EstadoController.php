@@ -153,12 +153,16 @@ class EstadoController extends Controller
     }
 
     /**
-     * Realiza la baja lógica del estado y propaga la desactivación en cascada a sus dependencias subordinadas.
+     * Ejecuta la eliminación lógica en interfaz (`deleted_at` + `status_id = 2`)
+     * propagando la baja en cascada sin borrar registros físicos de BD.
+     *
+     * Historial:
+     * - 2026-11-16: Reemplazada la mera inactivación (`desactivarConCascada`) por `eliminarConCascada`.
      */
     public function destroy(int $id_esd): RedirectResponse
     {
         try {
-            $resultado = Estado::desactivarConCascada($id_esd, auth()->id());
+            $resultado = Estado::eliminarConCascada($id_esd, auth()->id());
 
             return redirect()
                 ->back()

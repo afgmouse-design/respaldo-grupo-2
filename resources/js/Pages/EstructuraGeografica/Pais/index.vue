@@ -11,40 +11,35 @@
  * Actualización (Interruptor de Estado - StatusSwitch):
  * Se incorporó el suiche interactivo en la columna de Estatus para activar y desactivar
  * países directamente desde el listado con confirmación modal e integridad en cascada.
+ * - 2026-11-16: Estandarización global con <CrudActionButtons /> (Ver detalles / Editar / Eliminar),
+ *   botón superior "Nuevo País" y columna "Acciones" uniforme.
  */
-import { ref, watch, computed } from 'vue';
 import { Head, Link, router } from '@inertiajs/vue3';
+import { Globe, Layers, Plus, X } from 'lucide-vue-next';
+import { computed, ref, watch } from 'vue';
 import { route } from 'ziggy-js';
-import AppLayout from '@/layouts/AppLayout.vue';
 import { Button } from '@/components/ui/button';
-import Badge from '@/components/ui/badge/Badge.vue';
-import StatusSwitch from '@/components/ui/StatusSwitch.vue';
-import SuccessAlert from '@/components/ui/SuccessAlert.vue';
-import DataTable from '@/components/ui/DataTable.vue';
+import CrudActionButtons from '@/components/ui/CrudActionButtons.vue';
 import DataPagination from '@/components/ui/DataPagination.vue';
-import TableSkeleton from '@/components/ui/TableSkeleton.vue';
+import DataTable from '@/components/ui/DataTable.vue';
 import SearchFilter from '@/components/ui/filters/SearchFilter.vue';
 import TabFilter from '@/components/ui/filters/TabFilter.vue';
+import StatusSwitch from '@/components/ui/StatusSwitch.vue';
+import SuccessAlert from '@/components/ui/SuccessAlert.vue';
+import TableSkeleton from '@/components/ui/TableSkeleton.vue';
+import { useConfirmDialog } from '@/composables/useConfirmDialog';
 import { useDataFetching } from '@/composables/useDataFetching';
 import { useFlashAlert } from '@/composables/useFlashAlert';
-import { useConfirmDialog } from '@/composables/useConfirmDialog';
+import AppLayout from '@/layouts/AppLayout.vue';
+import { esActivo, resolverStatusId } from '@/lib/status';
 import type { Column } from '@/types/dataTable';
 import type { BreadcrumbItem } from '@/types/navigation';
-import {
-    Globe,
-    Plus,
-    Eye,
-    Pencil,
-    Trash2,
-    X,
-    Layers,
-    MapPin,
-} from 'lucide-vue-next';
 
 interface PaisItem {
     id_pai: number;
     nombre_pai: string;
-    status: boolean;
+    status_id?: number;
+    status?: boolean | number;
     estados_count?: number;
     created_at?: string;
     updated_at?: string;
@@ -83,7 +78,7 @@ const columns: Column[] = [
     { key: 'nombre_pai', label: 'Nombre Oficial del País', align: 'left' },
     { key: 'estados_count', label: 'Estados Federados', align: 'center', width: 'w-44' },
     { key: 'status', label: 'Estatus', align: 'center', width: 'w-40' },
-    { key: 'actions', label: 'Acciones Directas', align: 'center', width: 'w-48' },
+    { key: 'actions', label: 'Acciones', align: 'center', width: 'w-36' },
 ];
 
 const {
@@ -123,11 +118,7 @@ watch(
     { deep: true, immediate: true }
 );
 
-// Lectura reactiva directa del campo de estatus de la fila
-const isActivo = (row: any) => {
-    const val = row?.status ?? row?.est_pai;
-    return val === true || val === 1 || val === '1' || val === 'true';
-};
+const isActivo = (row: any) => esActivo(row);
 
 const alternarEstatus = async (row: any) => {
     const activo = isActivo(row);
@@ -138,12 +129,6 @@ const alternarEstatus = async (row: any) => {
 
     if (await confirmDialog(msg, `Confirmar ${accion} país`)) {
         router.patch(route('geografia.pais.status', row.id_pai), {}, { preserveScroll: true });
-    }
-};
-
-const eliminarRegistro = async (ruta: string) => {
-    if (await confirmDialog('⚠️ ADVERTENCIA: ¿Estás seguro de eliminar este registro? Si tiene dependencias (hijos registrados), también serán eliminados en cascada para mantener la integridad del sistema.')) {
-        router.delete(ruta);
     }
 };
 </script>
@@ -177,10 +162,10 @@ const eliminarRegistro = async (ruta: string) => {
                 </div>
 
                 <div class="flex items-center gap-2">
-                    <Button as-child size="default" class="shadow-sm">
+                    <Button as-child size="default" class="gap-2 shadow-sm">
                         <Link :href="route('geografia.pais.create')">
-                            <Plus class="h-4 w-4 mr-2" />
-                            Registrar País
+                            <Plus class="h-4 w-4" />
+                            Nuevo País
                         </Link>
                     </Button>
                 </div>
@@ -240,44 +225,25 @@ const eliminarRegistro = async (ruta: string) => {
                         </span>
                     </template>
 
-                    <!-- SLOT: ESTATUS (Interruptor reactivo con est_pai / status) -->
+                    <!-- SLOT: ESTATUS (`status_id`) -->
                     <template #status="{ row, item }">
                         <StatusSwitch
-                            :key="`pais-${(row || item)?.id_pai}-${((row || item)?.est_pai ?? (row || item)?.status)}`"
-                            :status="(row || item)?.est_pai ?? (row || item)?.status"
+                            :key="`pais-${(row || item)?.id_pai}-${resolverStatusId(row || item)}`"
+                            :status="resolverStatusId(row || item)"
                             @toggle="alternarEstatus(row || item)"
                         />
                     </template>
 
-                    <!-- SLOT: ACCIONES DIRECTAS STANDALONE (0 MODALES) -->
+                    <!-- SLOT: ACCIONES ESTÁNDAR -->
                     <template #actions="{ row }">
-                        <div class="flex items-center justify-center gap-1.5">
-                            <!-- Ver Detalle -->
-                            <Button as-child variant="ghost" size="icon" class="h-8 w-8 text-slate-600 hover:text-primary dark:text-slate-400" title="Ver ficha completa">
-                                <Link :href="route('geografia.pais.show', row.id_pai)">
-                                    <Eye class="h-4 w-4" />
-                                </Link>
-                            </Button>
-
-                            <!-- Editar -->
-                            <Button as-child variant="ghost" size="icon" class="h-8 w-8 text-amber-600 hover:text-amber-700 dark:text-amber-400" title="Editar datos">
-                                <Link :href="route('geografia.pais.edit', row.id_pai)">
-                                    <Pencil class="h-4 w-4" />
-                                </Link>
-                            </Button>
-
-                            <!-- Eliminar País (Baja lógica en cascada) -->
-                            <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                class="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
-                                title="Eliminar país"
-                                @click="eliminarRegistro(route('geografia.pais.destroy', row.id_pai))"
-                            >
-                                <Trash2 class="h-4 w-4" />
-                            </Button>
-                        </div>
+                        <CrudActionButtons
+                            show-route="geografia.pais.show"
+                            edit-route="geografia.pais.edit"
+                            delete-route="geografia.pais.destroy"
+                            :record-id="row.id_pai"
+                            :record-name="row.nombre_pai"
+                            confirm-message="⚠️ ADVERTENCIA: ¿Estás seguro de eliminar este registro? Si tiene dependencias (hijos registrados), también serán eliminados en cascada para mantener la integridad del sistema."
+                        />
                     </template>
                 </DataTable>
             </div>

@@ -5,24 +5,22 @@
  * Propósito: Página independiente con formulario para dar de alta una nueva entidad
  * federal/estado en el sistema SOGAC, asignando obligatoriamente su País padre.
  * Cumple estrictamente la regla de CERO MODALES.
+ *
+ * Historial:
+ * - 2026-11-16: Estandarización del pie de formulario con <CrudFormFooter />.
  */
-import { onMounted } from 'vue';
 import { Head, Link, useForm } from '@inertiajs/vue3';
+import { AlertCircle, ArrowLeft, MapPin } from 'lucide-vue-next';
+import { onMounted } from 'vue';
 import { route } from 'ziggy-js';
-import AppLayout from '@/layouts/AppLayout.vue';
 import { Button } from '@/components/ui/button';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
+import CrudFormFooter from '@/components/ui/CrudFormFooter.vue';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
-import type { BreadcrumbItem } from '@/types/navigation';
+import AppLayout from '@/layouts/AppLayout.vue';
 import { formatNombre } from '@/lib/utils';
-import {
-    MapPin,
-    ArrowLeft,
-    Save,
-    AlertCircle,
-    Globe,
-} from 'lucide-vue-next';
+import type { BreadcrumbItem } from '@/types/navigation';
 
 interface PaisRef {
     id_pai: number;
@@ -42,6 +40,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 const form = useForm({
     nombre_esd: '',
+    iso_esd: '',
     pai_id: props.paises.length === 1 ? props.paises[0].id_pai : '',
 });
 
@@ -166,19 +165,32 @@ const submit = () => {
                                 El nombre no debe repetirse dentro del mismo país seleccionado.
                             </p>
                         </div>
+
+                        <!-- CAMPO: CÓDIGO ISO (`iso_esd`) -->
+                        <div class="space-y-2">
+                            <Label for="iso_esd" class="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                                Código ISO (Opcional)
+                            </Label>
+                            <Input
+                                id="iso_esd"
+                                v-model="form.iso_esd"
+                                type="text"
+                                placeholder="Ej: VE-P"
+                                maxlength="10"
+                                :class="{ 'border-destructive focus-visible:ring-destructive/20': form.errors.iso_esd }"
+                                autocomplete="off"
+                            />
+                            <p v-if="form.errors.iso_esd" class="text-xs text-destructive font-medium">
+                                {{ form.errors.iso_esd }}
+                            </p>
+                        </div>
                     </CardContent>
 
-                    <CardFooter class="flex items-center justify-end gap-3 border-t bg-muted/20 px-6 py-4">
-                        <Button as-child variant="outline">
-                            <Link :href="route('geografia.estado.index')">
-                                Cancelar
-                            </Link>
-                        </Button>
-
-                        <Button type="submit" :disabled="form.processing" class="shadow-xs">
-                            <Save class="h-4 w-4 mr-2" />
-                            {{ form.processing ? 'Guardando...' : 'Guardar' }}
-                        </Button>
+                    <CardFooter class="border-t border-slate-100 bg-muted/20 px-6 py-4 dark:border-slate-800/60">
+                        <CrudFormFooter
+                            :cancel-href="route('geografia.estado.index')"
+                            :processing="form.processing"
+                        />
                     </CardFooter>
                 </form>
             </Card>

@@ -3,10 +3,11 @@
  * Vista Standalone: Detalle de Lapso Académico (Módulo: Estructura Académica).
  *
  * Propósito: Muestra la ficha técnica con los detalles del Lapso Académico seleccionado,
- * incluyendo el Año Académico padre al que pertenece.
+ * incluyendo el Año Académico padre y Tipo de Lapso al que pertenece.
  *
- * Actualización: Corrección de ruta de importación de '@/Layouts' a '@/layouts'
- * para compatibilidad con sistemas de archivos sensibles a mayúsculas/minúsculas (Linux).
+ * Historial:
+ *  - 2026-11-14: Alineado a esquema `sogac_mio.sql` (`id_laa`, `codigo_laa`, `nombre_laa`,
+ *    `nombre_ana`, `nombre_tla`, `fecha_inicio_laa`, `fecha_fin_laa`, `status_id` con `@/lib/status`).
  */
 import { computed } from 'vue';
 import { Head, Link } from '@inertiajs/vue3';
@@ -15,6 +16,7 @@ import AuthenticatedLayout from '@/layouts/AuthenticatedLayout.vue';
 import { Button } from '@/components/ui/button';
 import Badge from '@/components/ui/badge/Badge.vue';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
+import { esActivo } from '@/lib/status';
 import type { BreadcrumbItem } from '@/types/navigation';
 import {
     Clock,
@@ -26,36 +28,37 @@ import {
 } from 'lucide-vue-next';
 
 interface LapsoAcademicoDetalle {
-    id_la: number;
-    ano_id?: number | null;
-    nombre_la: string;
-    fecha_inicio_la?: string | null;
-    fecha_fin_la?: string | null;
-    estado_la: boolean | number;
-    nombre_ano?: string | null;
-    ano_status?: boolean | number;
+    id_laa: number;
+    ana_id?: number | null;
+    tla_id?: number | null;
+    codigo_laa?: string | null;
+    nombre_laa: string;
+    fecha_inicio_laa?: string | null;
+    fecha_fin_laa?: string | null;
+    fase_operativa_laa?: string | null;
+    status_id?: number | null;
+    nombre_ana?: string | null;
+    nombre_tla?: string | null;
+    ano_status_id?: number | null;
 }
 
 const props = defineProps<{
     lapso: LapsoAcademicoDetalle;
 }>();
 
-const isActivo = computed(() => {
-    const val = props.lapso?.estado_la;
-    return val === true || val === 1 || val === '1' || val === 'true';
-});
+const isActivo = computed(() => esActivo(props.lapso));
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Dashboard', subtitle: 'Panel Principal', href: route('dashboard') },
     { title: 'Estructura Académica', subtitle: 'Calendario', href: '#' },
     { title: 'Lapsos Académicos', subtitle: 'Gestión de Lapsos Académicos', href: route('academico.lapso-academico.index') },
-    { title: props.lapso?.nombre_la ?? 'Lapso Académico', subtitle: 'Ficha Técnica', href: route('academico.lapso-academico.show', props.lapso?.id_la) },
+    { title: props.lapso?.nombre_laa ?? 'Lapso Académico', subtitle: 'Ficha Técnica', href: route('academico.lapso-academico.show', props.lapso?.id_laa) },
 ];
 </script>
 
 <template>
     <AuthenticatedLayout :breadcrumbs="breadcrumbs">
-        <Head :title="`Detalle Lapso Académico: ${props.lapso?.nombre_la ?? ''} - Estructura Académica`" />
+        <Head :title="`Detalle Lapso Académico: ${props.lapso?.nombre_laa ?? ''} - Estructura Académica`" />
 
         <div class="w-full px-4 sm:px-6 lg:px-8 py-6 space-y-6">
             <!-- ENCABEZADO Y RETORNO -->
@@ -74,7 +77,7 @@ const breadcrumbs: BreadcrumbItem[] = [
                             </Link>
                         </Button>
                         <h1 class="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
-                            Detalle del Lapso Académico: {{ props.lapso?.nombre_la }}
+                            Detalle del Lapso Académico: {{ props.lapso?.nombre_laa }}
                         </h1>
                         <Badge :variant="isActivo ? 'successCustom' : 'destructiveCustom'" class="ml-2">
                             {{ isActivo ? 'Activo' : 'Inactivo' }}
@@ -93,7 +96,7 @@ const breadcrumbs: BreadcrumbItem[] = [
                         </Link>
                     </Button>
                     <Button as-child class="shadow-sm">
-                        <Link :href="route('academico.lapso-academico.edit', props.lapso?.id_la)">
+                        <Link :href="route('academico.lapso-academico.edit', props.lapso?.id_laa)">
                             <Pencil class="h-4 w-4 mr-2" />
                             Editar
                         </Link>
@@ -126,7 +129,7 @@ const breadcrumbs: BreadcrumbItem[] = [
                                 ID del Registro
                             </div>
                             <p class="text-lg font-mono font-bold text-slate-900 dark:text-slate-100">
-                                #{{ props.lapso?.id_la }}
+                                #{{ props.lapso?.id_laa }}
                             </p>
                         </div>
 
@@ -150,7 +153,7 @@ const breadcrumbs: BreadcrumbItem[] = [
                             </div>
                             <p class="text-base font-semibold text-slate-900 dark:text-slate-100">
                                 <span class="font-mono text-sm font-semibold px-2.5 py-0.5 rounded bg-muted text-foreground">
-                                    {{ props.lapso?.nombre_ano || 'Sin asignar' }}
+                                    {{ props.lapso?.nombre_ana || 'Sin asignar' }}
                                 </span>
                             </p>
                         </div>
@@ -162,7 +165,10 @@ const breadcrumbs: BreadcrumbItem[] = [
                                 Nombre del Lapso Académico
                             </div>
                             <p class="text-lg font-semibold text-slate-900 dark:text-slate-100">
-                                {{ props.lapso?.nombre_la }}
+                                {{ props.lapso?.nombre_laa }}
+                            </p>
+                            <p v-if="props.lapso?.codigo_laa || props.lapso?.nombre_tla" class="text-xs text-muted-foreground">
+                                {{ [props.lapso?.codigo_laa, props.lapso?.nombre_tla].filter(Boolean).join(' · ') }}
                             </p>
                         </div>
 
@@ -173,7 +179,7 @@ const breadcrumbs: BreadcrumbItem[] = [
                                 Fecha de Inicio
                             </div>
                             <p class="text-base font-medium text-slate-800 dark:text-slate-200">
-                                {{ props.lapso?.fecha_inicio_la ? String(props.lapso.fecha_inicio_la).substring(0, 10) : 'No definida (N/A)' }}
+                                {{ props.lapso?.fecha_inicio_laa ? String(props.lapso.fecha_inicio_laa).substring(0, 10) : 'No definida (N/A)' }}
                             </p>
                         </div>
 
@@ -184,7 +190,7 @@ const breadcrumbs: BreadcrumbItem[] = [
                                 Fecha de Finalización
                             </div>
                             <p class="text-base font-medium text-slate-800 dark:text-slate-200">
-                                {{ props.lapso?.fecha_fin_la ? String(props.lapso.fecha_fin_la).substring(0, 10) : 'No definida (N/A)' }}
+                                {{ props.lapso?.fecha_fin_laa ? String(props.lapso.fecha_fin_laa).substring(0, 10) : 'No definida (N/A)' }}
                             </p>
                         </div>
                     </div>

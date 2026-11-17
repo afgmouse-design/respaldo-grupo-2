@@ -1,9 +1,13 @@
 <script setup lang="ts">
 /**
- * Vista Standalone: Detalle de Sección, Asignación Docente y Horarios (Programación Académica).
+ * Vista Standalone: Detalle de Sección, Carga Académica (`carga_academica`) y Horarios (`horario`).
  *
- * Propósito: Ficha técnica integral de la sección, administración de unidades curriculares,
- * vinculación de profesores por búsqueda, y programación de horarios con validación Anti-Choque.
+ * Propósito: Ficha técnica integral de la sección, administración de cargas académicas
+ * (`pep_id -> persona_perfil.id_pep`), y programación de horarios con Motor Anti-Choque.
+ *
+ * Historial:
+ *  - 2026-11-15: Alineado a `programa`, `lapso_academico(id_laa, nombre_laa)`, `tipo_seccion(nombre_tis)`,
+ *    `turno(nombre_tur)`, `cargas_academicas(id_caa, pep_id)`, `horario(id_hor, dia_semana_hor)` y `status_id`.
  */
 import { ref, computed } from 'vue';
 import { Head, Link, useForm, router } from '@inertiajs/vue3';
@@ -17,6 +21,16 @@ import { Label } from '@/components/ui/label';
 import SuccessAlert from '@/components/ui/SuccessAlert.vue';
 import { useFlashAlert } from '@/composables/useFlashAlert';
 import { useConfirmDialog } from '@/composables/useConfirmDialog';
+import { esActivo } from '@/lib/status';
+import {
+    coincideDiaHorario,
+    formatearHoraCorta,
+    obtenerCorreoDocente,
+    obtenerIdDocente,
+    obtenerNombreDocente,
+    obtenerNombreDocenteCarga,
+    type DocenteSelectOption,
+} from '@/lib/academico';
 import type { BreadcrumbItem } from '@/types/navigation';
 import {
     ArrowLeft,
@@ -24,18 +38,13 @@ import {
     Users,
     CheckCircle2,
     XCircle,
-    Building2,
     BookOpen,
-    Calendar,
     Clock,
     Plus,
     Trash2,
     Search,
-    AlertTriangle,
     DoorClosed,
     UserCheck,
-    GraduationCap,
-    Network,
 } from 'lucide-vue-next';
 
 interface AulaItem {
@@ -54,20 +63,21 @@ interface MateriaMallaItem {
 }
 
 interface HorarioItem {
-    id_sho: number;
-    dia_semana: number;
-    hora_inicio: string;
-    hora_fin: string;
-    tipo_sesion: string;
+    id_hor: number;
+    dia_semana_hor: string | number;
+    hora_inicio_hor: string;
+    hora_fin_hor: string;
+    tipo_sesion_hor: string;
     aula?: AulaItem | null;
 }
 
-interface UnidadDocenteItem {
-    id_sud: number;
-    tipo_contratacion: string;
-    horas_semanales: number;
-    docente?: { id: number; name: string; email: string } | null;
-    malla_curricular_detalle?: MateriaMallaItem | null;
+interface CargaAcademicaItem {
+    id_caa: number;
+    pep_id: number;
+    tipo_contratacion_caa?: string | null;
+    horas_semanales_caa?: number | null;
+    docente_perfil?: DocenteSelectOption | null;
+    unidad_curricular?: { id_unc: number; codigo_unc: string; nombre_unc: string } | null;
     horarios?: HorarioItem[];
 }
 
@@ -75,19 +85,22 @@ interface SeccionItem {
     id_sec: number;
     codigo_sec?: string | null;
     nombre_sec: string;
-    tipo_seccion?: string;
+    tipo_seccion?: { id_tis?: number; nombre_tis?: string } | string | null;
     trayecto_sec?: number;
     semestre_sec?: number;
     nivel_sec?: number;
-    turno_sec: string;
+    turno?: { id_tur?: number; nombre_tur?: string } | null;
+    turno_sec?: string;
     cupo_maximo_sec: number;
+    status_id?: number;
     status?: boolean;
-    lapso_academico?: { id_la: number; nombre_la: string };
-    pnf?: { id_pnf: number; nombre_pnf: string; codigo_pnf?: string };
+    lapso_academico?: { id_laa?: number; id_la?: number; nombre_laa?: string; nombre_la?: string };
+    programa?: { id_prg?: number; nombre_prg?: string; codigo_prg?: string };
+    pnf?: { id_pnf?: number; nombre_pnf?: string; codigo_pnf?: string };
     sede?: { id_sed: number; nombre_sed: string };
     cohorte_sede?: { id_cos: number; nombre_cos: string } | null;
     malla_curricular?: { id_mac: number; nombre_mac: string } | null;
-    unidades_docentes?: UnidadDocenteItem[];
+    cargas_academicas?: CargaAcademicaItem[];
 }
 
 const props = defineProps<{
@@ -115,20 +128,28 @@ const diasSemana = [
     { id: 6, nombre: 'Sábado' },
 ];
 
-// Estado y formularios
+const tipoSeccionEtiqueta = computed(() => {
+    const t = props.seccion.tipo_seccion;
+    return typeof t === 'object' && t !== null ? (t.nombre_tis ?? 'Regular') : (t || 'Regular');
+});
+
+const turnoEtiqueta = computed(() => props.seccion.turno?.nombre_tur || props.seccion.turno_sec || 'Matutino');
+const programaEtiqueta = computed(() => props.seccion.programa?.nombre_prg || props.seccion.pnf?.nombre_pnf || 'No asignado');
+const lapsoEtiqueta = computed(() => props.seccion.lapso_academico?.nombre_laa || props.seccion.lapso_academico?.nombre_la || 'No asignado');
+
 const docenteSearchQuery = ref('');
-const docenteResultados = ref<Array<{ id: number; name: string; email: string }>>([]);
+const docenteResultados = ref<DocenteSelectOption[]>([]);
 const buscandoDocente = ref(false);
 
 const formDocente = useForm({
     mcd_id: '',
-    docente_id: '',
-    tipo_contratacion: 'Titular',
-    horas_semanales: 4,
+    pep_id: '',
+    tipo_contratacion_caa: 'Titular',
+    horas_semanales_caa: 4,
 });
 
 const formHorario = useForm({
-    sud_id: '',
+    caa_id: '',
     aul_id: '',
     dia_semana: 1,
     hora_inicio: '08:00',
@@ -136,7 +157,6 @@ const formHorario = useForm({
     tipo_sesion: 'Teorica',
 });
 
-// Búsqueda AJAX de docentes
 const buscarDocentes = async () => {
     if (docenteSearchQuery.value.length < 2) {
         docenteResultados.value = [];
@@ -153,26 +173,26 @@ const buscarDocentes = async () => {
     }
 };
 
-const seleccionarDocente = (doc: { id: number; name: string; email: string }) => {
-    formDocente.docente_id = String(doc.id);
-    docenteSearchQuery.value = `${doc.name} (${doc.email})`;
+const seleccionarDocente = (doc: DocenteSelectOption) => {
+    formDocente.pep_id = String(obtenerIdDocente(doc));
+    const correo = obtenerCorreoDocente(doc);
+    docenteSearchQuery.value = `${obtenerNombreDocente(doc)}${correo ? ` (${correo})` : ''}`;
     docenteResultados.value = [];
 };
 
-// Acciones
 const submitAsignarDocente = () => {
     formDocente.post(route('seccion.asignar_docente', props.seccion.id_sec), {
         preserveScroll: true,
         onSuccess: () => {
-            formDocente.reset('mcd_id', 'docente_id');
+            formDocente.reset('mcd_id', 'pep_id');
             docenteSearchQuery.value = '';
         },
     });
 };
 
-const eliminarAsignacion = async (sudId: number) => {
+const eliminarAsignacion = async (caaId: number) => {
     if (await confirmDialog('¿Está seguro de que desea desvincular esta materia de la sección?', 'Desvincular materia')) {
-        router.delete(route('seccion.eliminar_asignacion_docente', sudId), {
+        router.delete(route('seccion.eliminar_asignacion_docente', caaId), {
             preserveScroll: true,
         });
     }
@@ -187,15 +207,14 @@ const submitAgregarHorario = () => {
     });
 };
 
-const eliminarHorarioBloque = async (shoId: number) => {
+const eliminarHorarioBloque = async (horId: number) => {
     if (await confirmDialog('¿Está seguro de eliminar este bloque horario?', 'Eliminar horario')) {
-        router.delete(route('seccion.eliminar_horario', shoId), {
+        router.delete(route('seccion.eliminar_horario', horId), {
             preserveScroll: true,
         });
     }
 };
 
-// Matriz de horario agrupada por día
 const bloquesPorDia = computed(() => {
     const mapa: Record<number, Array<{
         id: number;
@@ -207,22 +226,24 @@ const bloquesPorDia = computed(() => {
         tipo_sesion: string;
     }>> = { 1: [], 2: [], 3: [], 4: [], 5: [], 6: [] };
 
-    props.seccion.unidades_docentes?.forEach((ud) => {
-        const mat = ud.malla_curricular_detalle?.unidad_curricular?.nombre_unc || 'Materia';
-        const doc = ud.docente?.name || 'Por asignar';
+    props.seccion.cargas_academicas?.forEach((carga) => {
+        const mat = carga.unidad_curricular?.nombre_unc || 'Materia';
+        const doc = obtenerNombreDocenteCarga(carga);
 
-        ud.horarios?.forEach((h) => {
-            if (mapa[h.dia_semana]) {
-                mapa[h.dia_semana].push({
-                    id: h.id_sho,
-                    hora_inicio: h.hora_inicio.substring(0, 5),
-                    hora_fin: h.hora_fin.substring(0, 5),
-                    materia: mat,
-                    docente: doc,
-                    aula: h.aula?.codigo_aula_aul || 'Aula N/A',
-                    tipo_sesion: h.tipo_sesion,
-                });
-            }
+        carga.horarios?.forEach((h) => {
+            diasSemana.forEach((dia) => {
+                if (coincideDiaHorario(h, dia.id, dia.nombre)) {
+                    mapa[dia.id].push({
+                        id: h.id_hor,
+                        hora_inicio: formatearHoraCorta(h.hora_inicio_hor),
+                        hora_fin: formatearHoraCorta(h.hora_fin_hor),
+                        materia: mat,
+                        docente: doc,
+                        aula: h.aula?.codigo_aula_aul || 'Aula N/A',
+                        tipo_sesion: h.tipo_sesion_hor,
+                    });
+                }
+            });
         });
     });
 
@@ -239,10 +260,8 @@ const bloquesPorDia = computed(() => {
         <Head :title="`Sección: ${seccion.nombre_sec} - Programación Académica`" />
 
         <div class="w-full px-4 sm:px-6 lg:px-8 py-6 space-y-6">
-            <!-- ALERTA FLASH -->
-            <SuccessAlert v-if="showSuccessAlert" :message="message" @close="closeAlert" />
+            <SuccessAlert :show="showSuccessAlert" :message="message" @close="closeAlert" />
 
-            <!-- ENCABEZADO -->
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b pb-4 dark:border-slate-800">
                 <div class="space-y-1">
                     <div class="flex items-center gap-2">
@@ -256,7 +275,7 @@ const bloquesPorDia = computed(() => {
                         </h1>
                     </div>
                     <p class="text-sm text-muted-foreground ml-10">
-                        Configuración de la sección, asignación docente y motor de horarios anti-choque.
+                        Configuración de la sección, carga académica docente (`pep_id`) y horarios anti-choque.
                     </p>
                 </div>
 
@@ -270,7 +289,6 @@ const bloquesPorDia = computed(() => {
                 </div>
             </div>
 
-            <!-- FICHA TÉCNICA PRINCIPAL -->
             <Card class="border-slate-200 dark:border-slate-800 shadow-xs">
                 <CardHeader>
                     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -288,41 +306,41 @@ const bloquesPorDia = computed(() => {
 
                         <div class="flex items-center gap-2">
                             <Badge variant="outline" class="font-medium">
-                                {{ seccion.tipo_seccion || 'Regular' }}
+                                {{ tipoSeccionEtiqueta }}
                             </Badge>
-                            <Badge :variant="seccion.status ? 'default' : 'secondary'" class="gap-1.5 py-1 px-3">
-                                <CheckCircle2 v-if="seccion.status" class="h-3.5 w-3.5 text-emerald-500" />
+                            <Badge :variant="esActivo(seccion) ? 'default' : 'secondary'" class="gap-1.5 py-1 px-3">
+                                <CheckCircle2 v-if="esActivo(seccion)" class="h-3.5 w-3.5 text-emerald-500" />
                                 <XCircle v-else class="h-3.5 w-3.5 text-slate-400" />
-                                {{ seccion.status ? 'Activo' : 'Inactivo' }}
+                                {{ esActivo(seccion) ? 'Activo' : 'Inactivo' }}
                             </Badge>
                         </div>
                     </div>
                 </CardHeader>
 
                 <CardContent>
-                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border border-slate-100 dark:border-slate-800 text-xs">
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 text-xs bg-slate-50 dark:bg-slate-900/50 p-4 rounded-lg border">
                         <div>
-                            <span class="text-muted-foreground uppercase font-medium">Lapso Académico</span>
+                            <span class="text-muted-foreground uppercase font-medium">Programa Académico</span>
                             <p class="font-semibold text-slate-900 dark:text-slate-100 text-sm mt-0.5">
-                                {{ seccion.lapso_academico?.nombre_la || 'N/A' }}
+                                {{ programaEtiqueta }}
                             </p>
                         </div>
                         <div>
-                            <span class="text-muted-foreground uppercase font-medium">PNF / Carrera</span>
+                            <span class="text-muted-foreground uppercase font-medium">Sede</span>
                             <p class="font-semibold text-slate-900 dark:text-slate-100 text-sm mt-0.5">
-                                {{ seccion.pnf?.nombre_pnf || 'N/A' }}
+                                {{ seccion.sede?.nombre_sed || 'No asignada' }}
                             </p>
                         </div>
                         <div>
-                            <span class="text-muted-foreground uppercase font-medium">Sede Física</span>
+                            <span class="text-muted-foreground uppercase font-medium">Lapso Lectivo</span>
                             <p class="font-semibold text-slate-900 dark:text-slate-100 text-sm mt-0.5">
-                                {{ seccion.sede?.nombre_sed || 'N/A' }}
+                                {{ lapsoEtiqueta }}
                             </p>
                         </div>
                         <div>
                             <span class="text-muted-foreground uppercase font-medium">Turno y Cupo</span>
                             <p class="font-semibold text-slate-900 dark:text-slate-100 text-sm mt-0.5">
-                                {{ seccion.turno_sec }} (Máx. {{ seccion.cupo_maximo_sec }} est.)
+                                {{ turnoEtiqueta }} (Máx. {{ seccion.cupo_maximo_sec }} est.)
                             </p>
                         </div>
                         <div class="md:col-span-2">
@@ -341,25 +359,22 @@ const bloquesPorDia = computed(() => {
                 </CardContent>
             </Card>
 
-            <!-- SECCIÓN 2: ASIGNACIÓN DOCENTE Y UNIDADES CURRICULARES -->
             <Card class="border-slate-200 dark:border-slate-800 shadow-xs">
                 <CardHeader>
                     <div class="flex items-center gap-2">
                         <BookOpen class="h-5 w-5 text-primary" />
-                        <CardTitle class="text-lg">Asignación Docente y Unidades Curriculares</CardTitle>
+                        <CardTitle class="text-lg">Carga Académica y Unidades Curriculares</CardTitle>
                     </div>
                     <CardDescription>
-                        Vincule materias de la malla al grupo y asigne el profesor titular localizándolo por nombre o cédula.
+                        Vincule materias de la malla al grupo y asigne el profesor titular por su perfil docente.
                     </CardDescription>
                 </CardHeader>
 
                 <CardContent class="space-y-6">
-                    <!-- FORMULARIO DE ASIGNACIÓN (VISTA INTEGRADA) -->
                     <form @submit.prevent="submitAsignarDocente" class="bg-slate-50 dark:bg-slate-900/40 p-4 rounded-xl border space-y-4">
                         <h4 class="text-xs font-bold uppercase tracking-wider text-muted-foreground">Nueva Asignación</h4>
 
                         <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                            <!-- Unidad Curricular -->
                             <div class="space-y-1.5 md:col-span-2">
                                 <Label for="mcd_id">Materia de la Malla *</Label>
                                 <select
@@ -375,7 +390,6 @@ const bloquesPorDia = computed(() => {
                                 </select>
                             </div>
 
-                            <!-- Búsqueda de Docente -->
                             <div class="space-y-1.5 relative md:col-span-2">
                                 <Label for="docente_q">Buscar Docente (Cédula o Nombre) *</Label>
                                 <div class="relative">
@@ -389,33 +403,31 @@ const bloquesPorDia = computed(() => {
                                     <Search class="h-4 w-4 absolute right-2.5 top-2.5 text-muted-foreground" />
                                 </div>
 
-                                <!-- Dropdown de Resultados -->
                                 <div
                                     v-if="docenteResultados.length > 0"
                                     class="absolute z-20 w-full mt-1 bg-popover border rounded-md shadow-lg overflow-hidden text-xs"
                                 >
                                     <button
                                         v-for="doc in docenteResultados"
-                                        :key="doc.id"
+                                        :key="obtenerIdDocente(doc)"
                                         type="button"
                                         class="w-full px-3 py-2 text-left hover:bg-muted flex items-center justify-between"
                                         @click="seleccionarDocente(doc)"
                                     >
-                                        <span class="font-medium text-foreground">{{ doc.name }}</span>
-                                        <span class="text-muted-foreground">{{ doc.email }}</span>
+                                        <span class="font-medium text-foreground">{{ obtenerNombreDocente(doc) }}</span>
+                                        <span class="text-muted-foreground">{{ doc.cedula_per || obtenerCorreoDocente(doc) }}</span>
                                     </button>
                                 </div>
                             </div>
                         </div>
 
                         <div class="flex justify-end">
-                            <Button type="submit" size="sm" :disabled="formDocente.processing || !formDocente.mcd_id || !formDocente.docente_id" class="gap-1.5">
+                            <Button type="submit" size="sm" :disabled="formDocente.processing || !formDocente.mcd_id || !formDocente.pep_id" class="gap-1.5">
                                 <Plus class="h-3.5 w-3.5" /> Asignar a la Sección
                             </Button>
                         </div>
                     </form>
 
-                    <!-- TABLA DE MATERIAS ASIGNADAS -->
                     <div class="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-800">
                         <table class="w-full text-left text-xs">
                             <thead class="bg-slate-100 dark:bg-slate-800 uppercase font-semibold text-slate-700 dark:text-slate-300">
@@ -428,26 +440,26 @@ const bloquesPorDia = computed(() => {
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
-                                <tr v-for="ud in seccion.unidades_docentes || []" :key="ud.id_sud" class="hover:bg-slate-50/50 dark:hover:bg-slate-900/30">
+                                <tr v-for="carga in seccion.cargas_academicas || []" :key="carga.id_caa" class="hover:bg-slate-50/50 dark:hover:bg-slate-900/30">
                                     <td class="px-4 py-2.5 font-medium text-slate-900 dark:text-slate-100">
-                                        <div>{{ ud.malla_curricular_detalle?.unidad_curricular?.nombre_unc || 'Materia' }}</div>
+                                        <div>{{ carga.unidad_curricular?.nombre_unc || 'Materia' }}</div>
                                         <div class="text-[11px] font-mono text-muted-foreground">
-                                            {{ ud.malla_curricular_detalle?.unidad_curricular?.codigo_unc }}
+                                            {{ carga.unidad_curricular?.codigo_unc }}
                                         </div>
                                     </td>
                                     <td class="px-4 py-2.5">
                                         <div class="font-medium text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
                                             <UserCheck class="h-3.5 w-3.5 text-primary" />
-                                            <span>{{ ud.docente?.name || 'Sin docente' }}</span>
+                                            <span>{{ obtenerNombreDocenteCarga(carga, 'Sin docente') }}</span>
                                         </div>
-                                        <div class="text-[11px] text-muted-foreground">{{ ud.docente?.email }}</div>
+                                        <div class="text-[11px] text-muted-foreground">{{ obtenerCorreoDocente(carga.docente_perfil) }}</div>
                                     </td>
                                     <td class="px-4 py-2.5 text-center font-semibold">
-                                        {{ ud.horas_semanales }}h
+                                        {{ carga.horas_semanales_caa ?? 4 }}h
                                     </td>
                                     <td class="px-4 py-2.5 text-center">
                                         <span class="px-2 py-0.5 rounded-full bg-primary/10 text-primary font-mono text-[11px]">
-                                            {{ ud.horarios?.length || 0 }} bloques
+                                            {{ carga.horarios?.length || 0 }} bloques
                                         </span>
                                     </td>
                                     <td class="px-4 py-2.5 text-center">
@@ -456,13 +468,13 @@ const bloquesPorDia = computed(() => {
                                             size="icon"
                                             class="h-7 w-7 text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400"
                                             title="Desvincular materia"
-                                            @click="eliminarAsignacion(ud.id_sud)"
+                                            @click="eliminarAsignacion(carga.id_caa)"
                                         >
                                             <Trash2 class="h-3.5 w-3.5" />
                                         </Button>
                                     </td>
                                 </tr>
-                                <tr v-if="!seccion.unidades_docentes?.length">
+                                <tr v-if="!seccion.cargas_academicas?.length">
                                     <td colspan="5" class="text-center py-6 text-muted-foreground">
                                         No hay materias ni profesores asignados aún a esta sección.
                                     </td>
@@ -473,7 +485,6 @@ const bloquesPorDia = computed(() => {
                 </CardContent>
             </Card>
 
-            <!-- SECCIÓN 3: MOTOR DE HORARIOS Y AULAS (ANTI-CHOQUE) -->
             <Card class="border-slate-200 dark:border-slate-800 shadow-xs">
                 <CardHeader>
                     <div class="flex items-center gap-2">
@@ -486,28 +497,25 @@ const bloquesPorDia = computed(() => {
                 </CardHeader>
 
                 <CardContent class="space-y-6">
-                    <!-- FORMULARIO DE BLOQUE HORARIO -->
                     <form @submit.prevent="submitAgregarHorario" class="bg-slate-50 dark:bg-slate-900/40 p-4 rounded-xl border space-y-4">
                         <h4 class="text-xs font-bold uppercase tracking-wider text-muted-foreground">Agregar Bloque Semanal</h4>
 
                         <div class="grid grid-cols-1 md:grid-cols-5 gap-3">
-                            <!-- Materia / Docente -->
                             <div class="space-y-1.5 md:col-span-2">
-                                <Label for="sud_id">Materia Asignada *</Label>
+                                <Label for="caa_id">Carga Asignada *</Label>
                                 <select
-                                    id="sud_id"
-                                    v-model="formHorario.sud_id"
+                                    id="caa_id"
+                                    v-model="formHorario.caa_id"
                                     class="w-full h-9 px-3 py-1 rounded-md border text-xs bg-background"
                                     required
                                 >
                                     <option value="" disabled>Seleccione materia...</option>
-                                    <option v-for="ud in seccion.unidades_docentes || []" :key="ud.id_sud" :value="ud.id_sud">
-                                        {{ ud.malla_curricular_detalle?.unidad_curricular?.nombre_unc }} (Prof. {{ ud.docente?.name }})
+                                    <option v-for="carga in seccion.cargas_academicas || []" :key="carga.id_caa" :value="carga.id_caa">
+                                        {{ carga.unidad_curricular?.nombre_unc }} (Prof. {{ obtenerNombreDocenteCarga(carga) }})
                                     </option>
                                 </select>
                             </div>
 
-                            <!-- Aula / Espacio Físico -->
                             <div class="space-y-1.5">
                                 <Label for="aul_id">Aula o Laboratorio *</Label>
                                 <select
@@ -523,7 +531,6 @@ const bloquesPorDia = computed(() => {
                                 </select>
                             </div>
 
-                            <!-- Día de la semana -->
                             <div class="space-y-1.5">
                                 <Label for="dia_semana">Día *</Label>
                                 <select
@@ -538,7 +545,6 @@ const bloquesPorDia = computed(() => {
                                 </select>
                             </div>
 
-                            <!-- Horas -->
                             <div class="space-y-1.5 grid grid-cols-2 gap-1.5">
                                 <div>
                                     <Label for="hora_inicio">Inicio</Label>
@@ -552,13 +558,12 @@ const bloquesPorDia = computed(() => {
                         </div>
 
                         <div class="flex justify-end">
-                            <Button type="submit" size="sm" :disabled="formHorario.processing || !formHorario.sud_id || !formHorario.aul_id" class="gap-1.5">
+                            <Button type="submit" size="sm" :disabled="formHorario.processing || !formHorario.caa_id || !formHorario.aul_id" class="gap-1.5">
                                 <Plus class="h-3.5 w-3.5" /> Programar con Anti-Choque
                             </Button>
                         </div>
                     </form>
 
-                    <!-- CUADRÍCULA SEMANAL DE HORARIO DE LA SECCIÓN -->
                     <div class="space-y-3">
                         <div class="flex items-center justify-between">
                             <h4 class="text-sm font-semibold text-slate-900 dark:text-slate-100">

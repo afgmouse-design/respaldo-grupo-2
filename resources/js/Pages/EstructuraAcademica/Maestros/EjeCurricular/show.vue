@@ -11,6 +11,7 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
+import { esActivo as esRegistroActivo } from '@/lib/status';
 import type { BreadcrumbItem } from '@/types/navigation';
 import {
     Layers,
@@ -35,9 +36,7 @@ const props = defineProps<{
     eje: EjeCurricularItem;
 }>();
 
-const esActivo = computed(() => {
-    return props.eje.status ?? (props.eje.status_id === 1);
-});
+const esActivo = computed(() => esRegistroActivo(props.eje));
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Dashboard', subtitle: 'Panel Principal', href: route('dashboard') },

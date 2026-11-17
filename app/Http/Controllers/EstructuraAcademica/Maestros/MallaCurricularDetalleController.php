@@ -78,11 +78,13 @@ class MallaCurricularDetalleController extends Controller
             'tra_id'               => 'required|integer|exists:trayecto,id_tra',
             'esm_id'               => 'nullable|integer|exists:escala_medicion,id_esm',
             'ecu_id'               => 'nullable|integer|exists:eje_curricular,id_ecu',
-            'unidades_credito_mcd' => 'required|integer|min:0',
-            'htea_mcd'             => 'nullable|integer|min:0',
-            'htei_mcd'             => 'nullable|integer|min:0',
-            'thte_mcd'             => 'nullable|integer|min:0',
-            'duracion_semanas_mcd' => 'nullable|integer|min:1',
+            'unidades_credito_mcd'        => 'required|integer|min:0',
+            'htea_mcd'                    => 'nullable|integer|min:0',
+            'htei_mcd'                    => 'nullable|integer|min:0',
+            'thte_mcd'                    => 'nullable|integer|min:0',
+            'duracion_semanas_mcd'        => 'nullable|integer|min:1',
+            'duracion_semestres_mcd'      => 'nullable|integer|in:1,2',
+            'nota_minima_aprobatoria_mcd' => 'nullable|numeric|min:0',
         ], [
             'mac_id.required'               => 'La malla curricular es obligatoria.',
             'unc_id.required'               => 'La unidad curricular es obligatoria.',
@@ -111,7 +113,6 @@ class MallaCurricularDetalleController extends Controller
         }
 
         $validated['status_id'] = 1;
-        $validated['status'] = true;
         $validated['created_id'] = auth()->id();
 
         MallaCurricularDetalle::create($validated);
@@ -175,11 +176,13 @@ class MallaCurricularDetalleController extends Controller
             'tra_id'               => 'required|integer|exists:trayecto,id_tra',
             'esm_id'               => 'nullable|integer|exists:escala_medicion,id_esm',
             'ecu_id'               => 'nullable|integer|exists:eje_curricular,id_ecu',
-            'unidades_credito_mcd' => 'required|integer|min:0',
-            'htea_mcd'             => 'nullable|integer|min:0',
-            'htei_mcd'             => 'nullable|integer|min:0',
-            'thte_mcd'             => 'nullable|integer|min:0',
-            'duracion_semanas_mcd' => 'nullable|integer|min:1',
+            'unidades_credito_mcd'        => 'required|integer|min:0',
+            'htea_mcd'                    => 'nullable|integer|min:0',
+            'htei_mcd'                    => 'nullable|integer|min:0',
+            'thte_mcd'                    => 'nullable|integer|min:0',
+            'duracion_semanas_mcd'        => 'nullable|integer|min:1',
+            'duracion_semestres_mcd'      => 'nullable|integer|in:1,2',
+            'nota_minima_aprobatoria_mcd' => 'nullable|numeric|min:0',
         ]);
 
         if (!isset($validated['thte_mcd']) || $validated['thte_mcd'] === null) {
@@ -211,19 +214,25 @@ class MallaCurricularDetalleController extends Controller
     }
 
     /**
-     * Aplica baja lógica al registro cambiando status_id = 2.
+     * Ejecuta la eliminación lógica en interfaz (`deleted_at` + `status_id = 2`)
+     * conservando el detalle en PostgreSQL.
+     *
+     * Historial:
+     * - 2026-11-16: Reemplazada la mera inactivación (`alternarEstatus`) por `ejecutarBajaLogicaModelo`.
      */
     public function destroy(int $id): RedirectResponse
     {
-        $exito = MallaCurricularDetalle::alternarEstatus($id, 2);
+        $detalle = MallaCurricularDetalle::where('id_mcd', $id)->first();
 
-        if (!$exito) {
+        if (! $detalle) {
             return redirect()->back()->withErrors([
                 'error' => 'No se pudo dar de baja a la unidad curricular de la malla.',
             ]);
         }
 
-        return redirect()->back()->with('success', 'Unidad curricular dada de baja exitosamente de la malla.');
+        MallaCurricularDetalle::ejecutarBajaLogicaModelo($detalle, auth()->id(), MallaCurricularDetalle::STATUS_INACTIVO);
+
+        return redirect()->back()->with('success', 'Unidad curricular eliminada exitosamente de la malla.');
     }
 }
 

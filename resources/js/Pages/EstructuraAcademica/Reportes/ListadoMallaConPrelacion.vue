@@ -29,6 +29,12 @@ interface MallaItem {
     id_mac: number;
     nombre_mac: string;
     codigo_gaceta_mac?: string;
+    programa?: {
+        id_prg: number;
+        nombre_prg: string;
+        codigo_prg?: string;
+        codigo_ministerio_prg?: string;
+    };
     pnf?: {
         id_pnf: number;
         nombre_pnf: string;
@@ -133,13 +139,13 @@ const imprimir = () => {
                         @change="cambiarMalla"
                     >
                         <option v-for="m in props.mallas" :key="m.id_mac" :value="m.id_mac">
-                            {{ m.nombre_mac }} ({{ m.pnf?.nombre_pnf ?? 'Sin PNF' }})
+                            {{ m.nombre_mac }} ({{ m.programa?.nombre_prg ?? m.pnf?.nombre_pnf ?? 'Sin Programa' }})
                         </option>
                     </select>
                 </div>
 
                 <div v-if="props.mallaSeleccionada" class="flex items-center gap-3 text-xs text-muted-foreground">
-                    <span>PNF: <strong class="text-foreground">{{ props.mallaSeleccionada.pnf?.nombre_pnf }}</strong></span>
+                    <span>Programa / PNF: <strong class="text-foreground">{{ props.mallaSeleccionada.programa?.nombre_prg ?? props.mallaSeleccionada.pnf?.nombre_pnf }}</strong></span>
                     <span>Gaceta: <strong class="text-foreground">{{ props.mallaSeleccionada.codigo_gaceta_mac || 'S/N' }}</strong></span>
                 </div>
             </div>
@@ -208,17 +214,18 @@ const imprimir = () => {
                                         {{ d.unidades_credito_mcd }}
                                     </td>
 
-                                    <!-- MATERIAS REQUISITO QUE DEBE APROBAR ANTES -->
+                                    <!-- MATERIAS REQUISITO QUE DEBE APROBAR O CURSAR ANTES -->
                                     <td class="px-4 py-3">
-                                        <div v-if="(d.prelaciones || []).length > 0" class="flex flex-wrap gap-1.5">
+                                        <div v-if="(d.unidad_curricular?.prelaciones_exigidas || []).length > 0" class="flex flex-wrap gap-1.5">
                                             <span
-                                                v-for="pre in d.prelaciones"
-                                                :key="pre.id_ucp"
+                                                v-for="pre in d.unidad_curricular?.prelaciones_exigidas"
+                                                :key="pre.id_rep"
                                                 class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-900/50"
                                             >
                                                 <AlertCircle class="h-3 w-3 shrink-0" />
-                                                <strong class="font-mono">{{ pre.detalle_prelacion?.unidad_curricular?.codigo_unc }}</strong>
-                                                <span>{{ pre.detalle_prelacion?.unidad_curricular?.nombre_unc }}</span>
+                                                <strong class="font-mono">{{ pre.unidad_origen?.codigo_unc }}</strong>
+                                                <span>{{ pre.unidad_origen?.nombre_unc }}</span>
+                                                <span v-if="pre.tipo_requisito_rep" class="text-[10px] opacity-80">({{ pre.tipo_requisito_rep }})</span>
                                             </span>
                                         </div>
                                         <span v-else class="inline-flex items-center text-xs text-emerald-600 dark:text-emerald-400 font-medium">
@@ -229,16 +236,15 @@ const imprimir = () => {
 
                                     <!-- MATERIAS QUE HABILITA -->
                                     <td class="px-4 py-3">
-                                        <div v-if="(d.es_requisito_de || []).length > 0" class="flex flex-wrap gap-1.5">
+                                        <div v-if="(d.unidad_curricular?.es_prerrequisito_de || []).length > 0" class="flex flex-wrap gap-1.5">
                                             <span
-                                                v-for="hab in d.es_requisito_de"
-                                                :key="hab.id_ucp"
+                                                v-for="hab in d.unidad_curricular?.es_prerrequisito_de"
+                                                :key="hab.id_rep"
                                                 class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-900/50"
                                             >
                                                 <ArrowRight class="h-3 w-3 shrink-0" />
-                                                <strong class="font-mono">{{ hab.detalle_malla?.unidad_curricular?.codigo_unc }}</strong>
-                                                <span>{{ hab.detalle_malla?.unidad_curricular?.nombre_unc }}</span>
-                                            </span>
+                                                <strong class="font-mono">{{ hab.unidad_destino?.codigo_unc }}</strong>
+                                                <span>{{ hab.unidad_destino?.nombre_unc }}</span>                                            </span>
                                         </div>
                                         <span v-else class="text-xs text-muted-foreground italic">
                                             Fin de línea formativa

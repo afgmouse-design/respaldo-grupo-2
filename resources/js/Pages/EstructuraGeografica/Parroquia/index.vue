@@ -8,42 +8,32 @@
  *
  * Actualización (Baja Lógica en Cascada y Estandarización de Acciones):
  * Se reemplazó el botón alternador de estatus por el botón estandarizado de eliminación con ícono Trash2
- * Actualización (Interruptor de Estado - StatusSwitch):
- * Se incorporó el suiche interactivo en la columna de Estatus para activar y desactivar
- * parroquias directamente desde el listado con confirmación modal e integridad en cascada.
- * Actualización (Visualización Completa y Prevención de Truncamiento):
- * Se ajustó el contenedor de la tabla a `overflow-x-auto` para garantizar que la tabla
- * se muestre completa con todas sus columnas de acciones en cualquier ancho de pantalla.
+ * Actualización (2026-11-16 - Estandarización UI):
+ * Se ajusta el contenedor de la tabla a `overflow-hidden` consistente con Pais/Estado/Municipio/Localidad.
+ * Actualización (Alineación sogac_mio):
+ * Se reemplaza la lectura booleana legacy `status`/`est_par` por `status_id` mediante `@/lib/status`.
+ * - 2026-11-16: Estandarización global con <CrudActionButtons />, botón "Nueva Parroquia" y columna "Acciones".
  */
-import { computed, ref, watch } from 'vue';
 import { Head, Link, router } from '@inertiajs/vue3';
+import { Building2, Compass, Home, MapPin, Plus, X } from 'lucide-vue-next';
+import { computed, ref, watch } from 'vue';
 import { route } from 'ziggy-js';
-import AppLayout from '@/layouts/AppLayout.vue';
 import { Button } from '@/components/ui/button';
-import Badge from '@/components/ui/badge/Badge.vue';
-import StatusSwitch from '@/components/ui/StatusSwitch.vue';
-import SuccessAlert from '@/components/ui/SuccessAlert.vue';
-import DataTable from '@/components/ui/DataTable.vue';
+import CrudActionButtons from '@/components/ui/CrudActionButtons.vue';
 import DataPagination from '@/components/ui/DataPagination.vue';
-import TableSkeleton from '@/components/ui/TableSkeleton.vue';
+import DataTable from '@/components/ui/DataTable.vue';
 import SearchFilter from '@/components/ui/filters/SearchFilter.vue';
 import TabFilter from '@/components/ui/filters/TabFilter.vue';
+import StatusSwitch from '@/components/ui/StatusSwitch.vue';
+import SuccessAlert from '@/components/ui/SuccessAlert.vue';
+import TableSkeleton from '@/components/ui/TableSkeleton.vue';
+import { useConfirmDialog } from '@/composables/useConfirmDialog';
 import { useDataFetching } from '@/composables/useDataFetching';
 import { useFlashAlert } from '@/composables/useFlashAlert';
-import { useConfirmDialog } from '@/composables/useConfirmDialog';
+import AppLayout from '@/layouts/AppLayout.vue';
+import { esActivo, resolverStatusId } from '@/lib/status';
 import type { Column } from '@/types/dataTable';
 import type { BreadcrumbItem } from '@/types/navigation';
-import {
-    Compass,
-    Plus,
-    Eye,
-    Pencil,
-    Trash2,
-    X,
-    Building2,
-    MapPin,
-    Home,
-} from 'lucide-vue-next';
 
 interface EstadoRef {
     id_esd: number;
@@ -61,7 +51,8 @@ interface ParroquiaItem {
     id_par: number;
     nombre_par: string;
     mun_id: number;
-    status: boolean;
+    status_id?: number;
+    status?: boolean | number;
     est_par?: boolean;
     puede_activarse?: boolean;
     municipio?: MunicipioRef;
@@ -108,7 +99,7 @@ const columns: Column[] = [
     { key: 'adscripcion_rel', label: 'Municipio / Estado', align: 'left', width: 'w-60' },
     { key: 'localidades_count', label: 'Localidades', align: 'center', width: 'w-36' },
     { key: 'status', label: 'Estatus', align: 'center', width: 'w-40' },
-    { key: 'actions', label: 'Acciones Directas', align: 'center', width: 'w-48' },
+    { key: 'actions', label: 'Acciones', align: 'center', width: 'w-36' },
 ];
 
 const {
@@ -166,11 +157,8 @@ watch(
     { deep: true, immediate: true }
 );
 
-// Lectura reactiva directa del campo de estatus de la fila
-const isActivo = (row: any) => {
-    const val = row?.status ?? row?.est_par;
-    return val === true || val === 1 || val === '1' || val === 'true';
-};
+// Lectura reactiva directa del campo status_id de la fila
+const isActivo = (row: unknown) => esActivo(row);
 
 // Determina si la parroquia puede ser activada (sus entidades superiores Municipio, Estado y País están activas)
 const puedeActivarse = (row: ParroquiaItem) => {
@@ -178,8 +166,8 @@ const puedeActivarse = (row: ParroquiaItem) => {
         return Boolean(row.puede_activarse);
     }
     if (row.municipio) {
-        const municipioActivo = Boolean((row.municipio as any).status ?? (row.municipio as any).est_mun ?? true);
-        const estadoActivo = row.municipio.estado ? Boolean((row.municipio.estado as any).status ?? (row.municipio.estado as any).est_esd ?? true) : true;
+        const municipioActivo = esActivo(row.municipio);
+        const estadoActivo = row.municipio.estado ? esActivo(row.municipio.estado) : true;
         return municipioActivo && estadoActivo;
     }
     return true;
@@ -194,12 +182,6 @@ const alternarEstatus = async (row: ParroquiaItem) => {
 
     if (await confirmDialog(msg, `Confirmar ${accion} parroquia`)) {
         router.patch(route('geografia.parroquia.status', row.id_par), {}, { preserveScroll: true });
-    }
-};
-
-const eliminarRegistro = async (ruta: string) => {
-    if (await confirmDialog('⚠️ ADVERTENCIA: ¿Estás seguro de eliminar este registro? Si tiene dependencias (hijos registrados), también serán eliminados en cascada para mantener la integridad del sistema.')) {
-        router.delete(ruta);
     }
 };
 </script>
@@ -233,10 +215,10 @@ const eliminarRegistro = async (ruta: string) => {
                 </div>
 
                 <div class="flex items-center gap-2">
-                    <Button as-child size="default" class="shadow-sm">
+                    <Button as-child size="default" class="gap-2 shadow-sm">
                         <Link :href="route('geografia.parroquia.create')">
-                            <Plus class="h-4 w-4 mr-2" />
-                            Registrar Parroquia
+                            <Plus class="h-4 w-4" />
+                            Nueva Parroquia
                         </Link>
                     </Button>
                 </div>
@@ -317,7 +299,7 @@ const eliminarRegistro = async (ruta: string) => {
             </div>
 
             <!-- TABLA DE DATOS -->
-            <div class="bg-card rounded-xl border shadow-xs overflow-x-auto">
+            <div class="bg-card rounded-xl border shadow-xs overflow-hidden">
                 <TableSkeleton v-if="isLoading" :columns="columns" :skeleton-rows="5" />
                 <DataTable
                     v-else
@@ -355,46 +337,27 @@ const eliminarRegistro = async (ruta: string) => {
                         </span>
                     </template>
 
-                    <!-- SLOT: ESTATUS (Interruptor reactivo con est_par / status) -->
+                    <!-- SLOT: ESTATUS (Interruptor reactivo con status_id) -->
                     <template #status="{ row, item }">
                         <StatusSwitch
-                            :key="`par-${(row || item)?.id_par}-${((row || item)?.est_par ?? (row || item)?.status)}`"
-                            :status="(row || item)?.est_par ?? (row || item)?.status"
+                            :key="`par-${(row || item)?.id_par}-${resolverStatusId(row || item)}`"
+                            :status="esActivo(row || item)"
                             :disabled="!isActivo(row || item) && !puedeActivarse(row || item)"
                             :title="!isActivo(row || item) && !puedeActivarse(row || item) ? 'No se puede activar mientras su municipio o estado superior esté inactivo' : undefined"
                             @toggle="alternarEstatus(row || item)"
                         />
                     </template>
 
-                    <!-- SLOT: ACCIONES DIRECTAS STANDALONE (0 MODALES) -->
+                    <!-- SLOT: ACCIONES ESTÁNDAR -->
                     <template #actions="{ row }">
-                        <div class="flex items-center justify-center gap-1.5">
-                            <!-- Ver Detalle -->
-                            <Button as-child variant="ghost" size="icon" class="h-8 w-8 text-slate-600 hover:text-primary dark:text-slate-400" title="Ver ficha completa">
-                                <Link :href="route('geografia.parroquia.show', row.id_par)">
-                                    <Eye class="h-4 w-4" />
-                                </Link>
-                            </Button>
-
-                            <!-- Editar -->
-                            <Button as-child variant="ghost" size="icon" class="h-8 w-8 text-amber-600 hover:text-amber-700 dark:text-amber-400" title="Editar datos">
-                                <Link :href="route('geografia.parroquia.edit', row.id_par)">
-                                    <Pencil class="h-4 w-4" />
-                                </Link>
-                            </Button>
-
-                            <!-- Eliminar Parroquia (Baja lógica en cascada) -->
-                            <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                class="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
-                                title="Eliminar parroquia"
-                                @click="eliminarRegistro(route('geografia.parroquia.destroy', row.id_par))"
-                            >
-                                <Trash2 class="h-4 w-4" />
-                            </Button>
-                        </div>
+                        <CrudActionButtons
+                            show-route="geografia.parroquia.show"
+                            edit-route="geografia.parroquia.edit"
+                            delete-route="geografia.parroquia.destroy"
+                            :record-id="row.id_par"
+                            :record-name="row.nombre_par"
+                            confirm-message="⚠️ ADVERTENCIA: ¿Estás seguro de eliminar este registro? Si tiene dependencias (hijos registrados), también serán eliminados en cascada para mantener la integridad del sistema."
+                        />
                     </template>
                 </DataTable>
             </div>

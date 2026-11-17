@@ -1,29 +1,38 @@
 <script setup lang="ts">
 /**
- * Vista Standalone: Registrar Tipo de Lapso (Programación Académica).
+ * Vista Standalone: Crear Tipo de Lapso Académico (`tipo_lapso`).
  *
- * Propósito: Registro de nueva tipología de lapso académico mediante navegación directa SPA.
+ * Propósito: Registrar un nuevo tipo de período/lapso (`codigo_tla`, `nombre_tla`,
+ * `duracion_semanas_tla`, `nomenclatura_tla`, `descripcion_tla`) alineado a `sogac_mio.sql`.
+ *
+ * Historial:
+ *  - 2026-11-14: Alineado a columnas reales de `tipo_lapso(id_tla)` y `StoreTipoLapsoRequest`.
+ *  - 2026-11-16: Estandarización del pie de formulario con <CrudFormFooter />.
  */
 import { Head, Link, useForm } from '@inertiajs/vue3';
+import { ArrowLeft, Clock } from 'lucide-vue-next';
 import { route } from 'ziggy-js';
-import AppLayout from '@/layouts/AppLayout.vue';
 import { Button } from '@/components/ui/button';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
+import CrudFormFooter from '@/components/ui/CrudFormFooter.vue';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
+import AppLayout from '@/layouts/AppLayout.vue';
 import type { BreadcrumbItem } from '@/types/navigation';
-import { ArrowLeft, Save, Calendar } from 'lucide-vue-next';
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Dashboard', subtitle: 'Panel Principal', href: route('dashboard') },
     { title: 'Programación Académica', subtitle: 'Maestros', href: '#' },
     { title: 'Tipos de Lapso', subtitle: 'Listado', href: route('tipo_lapso.index') },
-    { title: 'Registrar Tipo de Lapso', subtitle: 'Nuevo Registro', href: route('tipo_lapso.create') },
+    { title: 'Crear Tipo de Lapso', subtitle: 'Nuevo Registro', href: route('tipo_lapso.create') },
 ];
 
 const form = useForm({
-    tap_codigo: '',
-    tap_nombre: '',
+    codigo_tla: '',
+    nombre_tla: '',
+    duracion_semanas_tla: 18,
+    nomenclatura_tla: '',
+    descripcion_tla: '',
 });
 
 const submit = () => {
@@ -35,7 +44,7 @@ const submit = () => {
 
 <template>
     <AppLayout :breadcrumbs="breadcrumbs">
-        <Head title="Registrar Tipo de Lapso - Programación Académica" />
+        <Head title="Crear Tipo de Lapso - Programación Académica" />
 
         <div class="w-full px-4 sm:px-6 lg:px-8 py-6 space-y-6">
             <div class="flex items-center justify-between border-b pb-4 dark:border-slate-800">
@@ -47,11 +56,11 @@ const submit = () => {
                             </Link>
                         </Button>
                         <h1 class="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
-                            Registrar Tipo de Lapso
+                            Crear Tipo de Lapso Académico
                         </h1>
                     </div>
                     <p class="text-sm text-muted-foreground ml-10">
-                        Cree un nuevo tipo de lapso para la programación académica.
+                        Defina la clasificación y duración estándar en semanas para los lapsos académicos.
                     </p>
                 </div>
             </div>
@@ -59,11 +68,11 @@ const submit = () => {
             <Card class="border-slate-200 dark:border-slate-800 shadow-xs max-w-4xl mx-auto">
                 <CardHeader>
                     <div class="flex items-center gap-2">
-                        <Calendar class="h-5 w-5 text-primary" />
+                        <Clock class="h-5 w-5 text-primary" />
                         <CardTitle class="text-lg font-semibold">Datos del Tipo de Lapso</CardTitle>
                     </div>
                     <CardDescription>
-                        Ingrese el código identificador y la denominación del lapso.
+                        Complete el código único, nombre descriptivo y semanas de duración.
                     </CardDescription>
                 </CardHeader>
 
@@ -71,51 +80,100 @@ const submit = () => {
                     <CardContent class="space-y-6">
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div class="space-y-2">
-                                <Label for="tap_codigo">
-                                    Código del Lapso <span class="text-destructive">*</span>
+                                <Label for="codigo_tla">
+                                    Código <span class="text-destructive">*</span>
                                 </Label>
                                 <Input
-                                    id="tap_codigo"
-                                    v-model="form.tap_codigo"
-                                    type="number"
-                                    placeholder="Ej. 1"
-                                    :class="{ 'border-destructive': form.errors.tap_codigo }"
+                                    id="codigo_tla"
+                                    v-model="form.codigo_tla"
+                                    type="text"
+                                    maxlength="20"
+                                    placeholder="Ej. SEM, TRI, INT"
+                                    :class="{ 'border-destructive': form.errors.codigo_tla }"
                                 />
-                                <span v-if="form.errors.tap_codigo" class="text-xs text-destructive">
-                                    {{ form.errors.tap_codigo }}
+                                <span v-if="form.errors.codigo_tla" class="text-xs text-destructive">
+                                    {{ form.errors.codigo_tla }}
                                 </span>
                             </div>
 
                             <div class="space-y-2">
-                                <Label for="tap_nombre">
-                                    Nombre del Lapso <span class="text-destructive">*</span>
+                                <Label for="nombre_tla">
+                                    Nombre <span class="text-destructive">*</span>
                                 </Label>
                                 <Input
-                                    id="tap_nombre"
-                                    v-model="form.tap_nombre"
+                                    id="nombre_tla"
+                                    v-model="form.nombre_tla"
                                     type="text"
-                                    placeholder="Ej. Semestre I, Trimestre Regular..."
-                                    :class="{ 'border-destructive': form.errors.tap_nombre }"
+                                    maxlength="100"
+                                    placeholder="Ej. Semestral Regular"
+                                    :class="{ 'border-destructive': form.errors.nombre_tla }"
                                 />
-                                <span v-if="form.errors.tap_nombre" class="text-xs text-destructive">
-                                    {{ form.errors.tap_nombre }}
+                                <span v-if="form.errors.nombre_tla" class="text-xs text-destructive">
+                                    {{ form.errors.nombre_tla }}
+                                </span>
+                            </div>
+
+                            <div class="space-y-2">
+                                <Label for="duracion_semanas_tla">
+                                    Duración (Semanas) <span class="text-destructive">*</span>
+                                </Label>
+                                <Input
+                                    id="duracion_semanas_tla"
+                                    v-model.number="form.duracion_semanas_tla"
+                                    type="number"
+                                    min="1"
+                                    max="104"
+                                    :class="{ 'border-destructive': form.errors.duracion_semanas_tla }"
+                                />
+                                <span v-if="form.errors.duracion_semanas_tla" class="text-xs text-destructive">
+                                    {{ form.errors.duracion_semanas_tla }}
+                                </span>
+                            </div>
+
+                            <div class="space-y-2">
+                                <Label for="nomenclatura_tla">
+                                    Nomenclatura / Prefijo
+                                </Label>
+                                <Input
+                                    id="nomenclatura_tla"
+                                    v-model="form.nomenclatura_tla"
+                                    type="text"
+                                    maxlength="20"
+                                    placeholder="Ej. S, T, INT"
+                                    :class="{ 'border-destructive': form.errors.nomenclatura_tla }"
+                                />
+                                <span v-if="form.errors.nomenclatura_tla" class="text-xs text-destructive">
+                                    {{ form.errors.nomenclatura_tla }}
+                                </span>
+                            </div>
+
+                            <div class="space-y-2 md:col-span-2">
+                                <Label for="descripcion_tla">
+                                    Descripción
+                                </Label>
+                                <Input
+                                    id="descripcion_tla"
+                                    v-model="form.descripcion_tla"
+                                    type="text"
+                                    maxlength="255"
+                                    placeholder="Descripción o alcance académico del tipo de lapso..."
+                                    :class="{ 'border-destructive': form.errors.descripcion_tla }"
+                                />
+                                <span v-if="form.errors.descripcion_tla" class="text-xs text-destructive">
+                                    {{ form.errors.descripcion_tla }}
                                 </span>
                             </div>
                         </div>
                     </CardContent>
 
-                    <CardFooter class="flex justify-end gap-3 border-t border-slate-100 dark:border-slate-800/60 pt-4">
-                        <Button as-child variant="outline" :disabled="form.processing">
-                            <Link :href="route('tipo_lapso.index')">Cancelar</Link>
-                        </Button>
-                        <Button type="submit" :disabled="form.processing" class="gap-2">
-                            <Save class="h-4 w-4" />
-                            <span>{{ form.processing ? 'Guardando...' : 'Guardar Tipo de Lapso' }}</span>
-                        </Button>
+                    <CardFooter class="border-t border-slate-100 bg-muted/20 px-6 py-4 dark:border-slate-800/60">
+                        <CrudFormFooter
+                            :cancel-href="route('tipo_lapso.index')"
+                            :processing="form.processing"
+                        />
                     </CardFooter>
                 </form>
             </Card>
         </div>
     </AppLayout>
 </template>
-

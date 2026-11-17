@@ -2,9 +2,15 @@
 
 namespace App\Models\ProgramacionAcademica\Maestros;
 
+use App\Models\Concerns\HandlesSoftDeleteWithStatus;
 use App\Models\Concerns\RegistraEnBitacora;
+use App\Models\Concerns\UsesStatusCatalog;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -12,59 +18,84 @@ use Illuminate\Support\Facades\DB;
  *
  * Propósito: Catálogo independiente que clasifica los ambientes físicos
  * (aula teórica, laboratorio, taller, etc.). Es referenciado por `aula.tia_id`.
- * Usa borrado lógico mediante el campo booleano `status` (true = Activo).
+ *
+ * Historial:
+ *  - 2026-11-14: Alineado a convenciones de `sogac_mio.sql` (`status_id` sin booleano `status`, `SoftDeletes`).
+ *  - 2026-11-16: Incorporado `HandlesSoftDeleteWithStatus` para eliminación lógica en interfaz.
  */
 class TipoAula extends Model
 {
+    use SoftDeletes;
     use RegistraEnBitacora;
+    use UsesStatusCatalog;
+    use HandlesSoftDeleteWithStatus;
 
-    /** Nombre explícito de la tabla (singular). */
     protected $table = 'tipo_aula';
 
-    /** Llave primaria personalizada. */
     protected $primaryKey = 'id_tia';
 
-    /** Módulo reportado en la bitácora de auditoría. */
     protected $moduloAuditoria = 'Tipo de Aula';
 
-    /** Atributos asignables masivamente. */
     protected $fillable = [
         'nombre_tia',
         'codigo_tia',
         'descripcion_tia',
-        'status',
         'status_id',
         'created_id',
         'updated_id',
     ];
 
-    /** Conversión de tipos. */
     protected $casts = [
         'id_tia'    => 'integer',
-        'status'    => 'boolean',
         'status_id' => 'integer',
     ];
 
     /**
-     * Obtiene los tipos de aula paginados con filtros dinámicos (búsqueda y estatus).
-     * Expone `id` como alias de `id_tia` para los componentes genéricos de tabla.
-     *
-     * @param array $filtros search (texto) y status ('all', '1', '0'; por defecto solo activos).
+     * Relación con las aulas asociadas a este tipo de ambiente.
+     */
+    public function aulas(): HasMany
+    {
+        return $this->hasMany(Aula::class, 'tia_id', 'id_tia');
+    }
+
+    /**
+     * Scope para registros activos (`status_id = 1`).
+     */
+    public function scopeActivos(Builder $query): Builder
+    {
+        return $query->where('status_id', self::STATUS_ACTIVO);
+    }
+
+    /**
+     * Obtiene los tipos de aula activos para selectores.
+     */
+    public static function obtenerActivosParaSelect(): Collection
+    {
+        return DB::table('tipo_aula')
+            ->select(['id_tia', 'nombre_tia', 'codigo_tia'])
+            ->where('status_id', self::STATUS_ACTIVO)
+            ->whereNull('deleted_at')
+            ->orderBy('nombre_tia')
+            ->get();
+    }
+
+    /**
+     * Obtiene los tipos de aula paginados con filtros dinámicos (`search` y `status`/`status_id`).
      */
     public static function obtenerPaginados(array $filtros = [], int $perPage = 10): LengthAwarePaginator
     {
-        $search = $filtros['search'] ?? null;
-        $status = $filtros['status'] ?? null;
+        $search   = $filtros['search'] ?? null;
+        $statusId = static::resolverFiltroStatusId($filtros['status'] ?? $filtros['status_id'] ?? null);
 
         return DB::table('tipo_aula')
             ->select('tipo_aula.*', 'id_tia as id')
             ->whereNull('deleted_at')
-            ->when($status !== null && $status !== '' && $status !== 'all', fn ($q) => $q->where('status', filter_var($status, FILTER_VALIDATE_BOOLEAN)))
-            ->when(!empty($search), function ($q) use ($search) {
+            ->when($statusId !== null, fn ($q) => $q->where('status_id', $statusId))
+            ->when(! empty($search), function ($q) use ($search) {
                 $q->where(function ($w) use ($search) {
                     $w->where('nombre_tia', 'ilike', "%{$search}%")
-                      ->orWhere('codigo_tia', 'ilike', "%{$search}%")
-                      ->orWhere('descripcion_tia', 'ilike', "%{$search}%");
+                        ->orWhere('codigo_tia', 'ilike', "%{$search}%")
+                        ->orWhere('descripcion_tia', 'ilike', "%{$search}%");
                 });
             })
             ->orderBy('id_tia', 'desc')
@@ -73,18 +104,15 @@ class TipoAula extends Model
     }
 
     /**
-     * Baja/alta lógica: fija status_id (1 = activo, 2 = inactivo) y sincroniza el booleano `status`.
-     * Usa Eloquent para que RegistraEnBitacora audite el cambio.
+     * Baja/alta lógica: fija `status_id` (1 = activo, 2 = inactivo).
      */
-    public static function alternarEstatus(int $id, int $estado = 2, ?int $userId = null): bool
+    public static function alternarEstatus(int $id, int $estado = self::STATUS_INACTIVO, ?int $userId = null): bool
     {
         $registro = static::query()->where('id_tia', $id)->firstOrFail();
 
-        return $registro->update([
+        return (bool) $registro->update([
             'status_id'  => $estado,
-            'status'     => $estado === 1,
             'updated_id' => $userId ?? auth()->id(),
         ]);
     }
 }
-

@@ -18,6 +18,12 @@ import {
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Calendar, UserCheck, School, Clock, Layers, Search, AlertCircle, ShieldAlert } from 'lucide-vue-next';
+import {
+    obtenerAulaEtiqueta,
+    obtenerIdDocente,
+    obtenerNombreDocente,
+    type DocenteSelectOption,
+} from '@/lib/academico';
 
 interface SeccionItem {
     id_sec: number;
@@ -36,23 +42,16 @@ interface SeccionItem {
     };
 }
 
-interface DocenteItem {
-    id: number;
-    name: string;
-    email: string;
-    cedula?: string;
-}
-
 interface AulaItem {
     id_aul: number;
-    nombre_aul: string;
     codigo_aula_aul: string;
+    nombre_aul?: string;
 }
 
 const props = defineProps<{
     isOpen: boolean;
     secciones: SeccionItem[];
-    docentes: DocenteItem[];
+    docentes: DocenteSelectOption[];
     aulas: AulaItem[];
 }>();
 
@@ -64,7 +63,7 @@ const emit = defineEmits<{
 const form = useForm({
     sec_id: '',
     mcd_id: '',
-    docente_id: '',
+    pep_id: '',
     aul_id: '',
     dia_semana: 1,
     hora_inicio: '07:30',
@@ -77,10 +76,10 @@ const searchDocente = ref('');
 const docentesFiltrados = computed(() => {
     if (!searchDocente.value.trim()) return props.docentes.slice(0, 10);
     const q = searchDocente.value.toLowerCase();
-    return props.docentes.filter(d =>
-        d.name.toLowerCase().includes(q) ||
-        (d.cedula && d.cedula.toLowerCase().includes(q)) ||
-        d.email.toLowerCase().includes(q)
+    return props.docentes.filter((d) =>
+        obtenerNombreDocente(d, '').toLowerCase().includes(q) ||
+        String(d.cedula_per ?? d.cedula ?? '').toLowerCase().includes(q) ||
+        String(d.correo_per ?? d.email ?? '').toLowerCase().includes(q)
     );
 });
 
@@ -214,19 +213,19 @@ const aplicarBloquePreset = (preset: { inicio: string; fin: string }) => {
                             />
                         </div>
                         <select
-                            v-model="form.docente_id"
+                            v-model="form.pep_id"
                             class="sm:w-3/5 h-8 rounded-md border border-input bg-background px-3 text-xs focus:ring-2 focus:ring-primary font-medium"
                             required
                         >
                             <option value="" disabled>Seleccione profesor asignado...</option>
-                            <option v-for="doc in docentesFiltrados" :key="doc.id" :value="doc.id">
-                                {{ doc.name }} {{ doc.cedula ? ' - C.I. ' + doc.cedula : ' - ' + doc.email }}
+                            <option v-for="doc in docentesFiltrados" :key="obtenerIdDocente(doc)" :value="obtenerIdDocente(doc)">
+                                {{ obtenerNombreDocente(doc) }}{{ (doc.cedula_per ?? doc.cedula) ? ` - C.I. ${doc.cedula_per ?? doc.cedula}` : '' }}
                             </option>
                         </select>
                     </div>
-                    <span v-if="form.errors.docente_id" class="text-[11px] text-destructive flex items-center gap-1 mt-1">
+                    <span v-if="form.errors.pep_id" class="text-[11px] text-destructive flex items-center gap-1 mt-1">
                         <ShieldAlert class="h-3.5 w-3.5" />
-                        {{ form.errors.docente_id }}
+                        {{ form.errors.pep_id }}
                     </span>
                 </div>
 
@@ -244,7 +243,7 @@ const aplicarBloquePreset = (preset: { inicio: string; fin: string }) => {
                         >
                             <option value="" disabled>Seleccione aula o taller...</option>
                             <option v-for="a in props.aulas" :key="a.id_aul" :value="a.id_aul">
-                                {{ a.codigo_aula_aul }} - {{ a.nombre_aul }}
+                                {{ obtenerAulaEtiqueta(a) }}
                             </option>
                         </select>
                         <span v-if="form.errors.aul_id" class="text-[11px] text-destructive flex items-center gap-1 mt-1">

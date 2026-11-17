@@ -15,6 +15,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import type { BreadcrumbItem } from '@/types/navigation';
+import { coincideDiaHorario } from '@/lib/academico';
 import {
     Calendar,
     Clock,
@@ -23,15 +24,12 @@ import {
     Download,
     DoorClosed,
     UserCheck,
-    GraduationCap,
-    BookOpen,
     Users,
-    ArrowLeft,
 } from 'lucide-vue-next';
 
 interface HorarioBloque {
     id: number;
-    dia_semana: number;
+    dia_semana: string | number;
     hora_inicio: string;
     hora_fin: string;
     tipo_sesion: string;
@@ -46,12 +44,14 @@ interface SeccionData {
     id_sec: number;
     codigo_sec?: string | null;
     nombre_sec: string;
-    tipo_seccion?: string;
-    turno_sec: string;
+    tipo_seccion?: string | { nombre_tis?: string } | null;
+    turno?: { nombre_tur?: string } | null;
+    turno_sec?: string;
     semestre_sec?: number;
     trayecto_sec?: number;
-    lapso_academico?: { id_la: number; nombre_la: string };
-    pnf?: { id_pnf: number; nombre_pnf: string; codigo_pnf?: string };
+    lapso_academico?: { id_laa?: number; id_la?: number; nombre_laa?: string; nombre_la?: string };
+    programa?: { id_prg?: number; nombre_prg?: string; codigo_prg?: string };
+    pnf?: { id_pnf?: number; nombre_pnf?: string; codigo_pnf?: string };
     sede?: { id_sed: number; nombre_sed: string };
     malla_curricular?: { id_mac: number; nombre_mac: string };
 }
@@ -98,9 +98,9 @@ const imprimirHorario = () => {
     window.print();
 };
 
-const getBloquesPorDia = (diaId: number) => {
+const getBloquesPorDia = (diaId: number, diaNombre?: string) => {
     return props.horario
-        .filter((h) => h.dia_semana === diaId)
+        .filter((h) => coincideDiaHorario(h, diaId, diaNombre))
         .sort((a, b) => a.hora_inicio.localeCompare(b.hora_inicio));
 };
 </script>
@@ -186,7 +186,9 @@ const getBloquesPorDia = (diaId: number) => {
                                 <h2 class="text-lg font-bold text-slate-900 dark:text-slate-100">
                                     {{ seccion.nombre_sec }}
                                 </h2>
-                                <Badge variant="outline">{{ seccion.tipo_seccion || 'Regular' }}</Badge>
+                                <Badge variant="outline">
+                                    {{ typeof seccion.tipo_seccion === 'object' && seccion.tipo_seccion !== null ? (seccion.tipo_seccion.nombre_tis ?? 'Regular') : (seccion.tipo_seccion || 'Regular') }}
+                                </Badge>
                             </div>
                             <p class="text-xs text-muted-foreground font-mono">
                                 Código Oficial: {{ seccion.codigo_sec || `#${seccion.id_sec}` }}
@@ -196,16 +198,16 @@ const getBloquesPorDia = (diaId: number) => {
                         <div class="text-right">
                             <span class="text-xs uppercase font-medium text-muted-foreground">Lapso Lectivo</span>
                             <div class="text-sm font-bold text-primary">
-                                {{ seccion.lapso_academico?.nombre_la || '2026-I' }}
+                                {{ seccion.lapso_academico?.nombre_laa || seccion.lapso_academico?.nombre_la || '2026-I' }}
                             </div>
                         </div>
                     </div>
 
                     <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
                         <div>
-                            <span class="text-muted-foreground uppercase font-medium">Carrera / PNF</span>
+                            <span class="text-muted-foreground uppercase font-medium">Programa Académico</span>
                             <p class="font-semibold text-slate-800 dark:text-slate-200 mt-0.5">
-                                {{ seccion.pnf?.nombre_pnf }}
+                                {{ seccion.programa?.nombre_prg || seccion.pnf?.nombre_pnf || 'No asignado' }}
                             </p>
                         </div>
                         <div>
@@ -217,7 +219,7 @@ const getBloquesPorDia = (diaId: number) => {
                         <div>
                             <span class="text-muted-foreground uppercase font-medium">Turno</span>
                             <p class="font-semibold text-slate-800 dark:text-slate-200 mt-0.5">
-                                {{ seccion.turno_sec }}
+                                {{ seccion.turno?.nombre_tur || seccion.turno_sec }}
                             </p>
                         </div>
                         <div>
@@ -247,9 +249,9 @@ const getBloquesPorDia = (diaId: number) => {
                                 {{ dia.nombre }}
                             </div>
 
-                            <div v-if="getBloquesPorDia(dia.id).length" class="space-y-2.5">
+                            <div v-if="getBloquesPorDia(dia.id, dia.nombre).length" class="space-y-2.5">
                                 <div
-                                    v-for="b in getBloquesPorDia(dia.id)"
+                                    v-for="b in getBloquesPorDia(dia.id, dia.nombre)"
                                     :key="b.id"
                                     class="bg-card border rounded-lg p-2.5 shadow-xs space-y-1.5 text-xs hover:border-primary/50 transition-colors"
                                 >

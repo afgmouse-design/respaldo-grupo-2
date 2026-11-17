@@ -3,58 +3,42 @@
 namespace App\Policies\ProgramacionAcademica\Maestros;
 
 use App\Models\User;
+use App\Policies\Concerns\AuthorizesConPermiso;
 use Illuminate\Auth\Access\HandlesAuthorization;
 
 /**
- * Policy: Autorización del maestro Horario (Grupo 3: Ángel Gonzales).
+ * Policy: Autorización del maestro Horario.
  *
- * Propósito: Centraliza la verificación de permisos horario.* creados por HorarioPermisosSeeder.
+ * Historial:
+ *  - 2026-11-14: Refactorización para reutilizar `AuthorizesConPermiso` y eliminar bypass sin control.
  */
 class HorarioPolicy
 {
     use HandlesAuthorization;
+    use AuthorizesConPermiso;
 
     public function viewAny(?User $user): bool
     {
-        return $this->verificarPermiso($user, 'horario.ver');
+        return $this->permiso($user, 'horario.ver');
     }
 
     public function view(?User $user, $horario = null): bool
     {
-        return $this->verificarPermiso($user, 'horario.ver');
+        return $this->permiso($user, 'horario.ver');
     }
 
     public function create(?User $user): bool
     {
-        return $this->verificarPermiso($user, 'horario.crear');
+        return $this->permiso($user, 'horario.crear');
     }
 
     public function update(?User $user, $horario = null): bool
     {
-        return $this->verificarPermiso($user, 'horario.editar');
+        return $this->permiso($user, 'horario.editar');
     }
 
     public function delete(?User $user, $horario = null): bool
     {
-        return $this->verificarPermiso($user, 'horario.eliminar');
-    }
-
-    protected function verificarPermiso(?User $user, string ...$permisos): bool
-    {
-        if (!$user) {
-            return false;
-        }
-
-        if (method_exists($user, 'isSuperAdmin') && $user->isSuperAdmin()) {
-            return true;
-        }
-
-        if (method_exists($user, 'hasAnyPermission') && $user->hasAnyPermission($permisos)) {
-            return true;
-        }
-
-        // Fallback para usuarios autenticados si no se cuenta con RBAC estricto
-        return true;
+        return $this->permiso($user, 'horario.eliminar');
     }
 }
-

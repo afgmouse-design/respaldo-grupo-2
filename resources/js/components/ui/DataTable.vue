@@ -75,7 +75,7 @@ const alignClass = (align?: string) => {
           </TableHeader>
 
           <TableBody>
-            <TableRow v-for="(row, index) in data" :key="row.id_tpd ?? row.id ?? row.id_pai ?? row.id_esd ?? row.id_mun ?? row.id_par ?? row.id_loc ?? row.id_uni ?? row.id_sed ?? index" @click="emit('rowClick', row)"
+            <TableRow v-for="(row, index) in data" :key="row.id ?? row.id_pai ?? row.id_esd ?? row.id_mun ?? row.id_par ?? row.id_loc ?? row.id_uni ?? row.id_sed ?? row.id_cse ?? row.id_prg ?? row.id_spr ?? row.id_laa ?? row.id_tla ?? row.id_ana ?? row.id_cos ?? row.id_sec ?? row.id_caa ?? row.id_hor ?? row.id_aul ?? row.id_tia ?? row.id_tis ?? row.id_tur ?? row.id_mac ?? row.id_mcd ?? row.id_unc ?? row.id_tra ?? row.id_sem ?? row.id_ecu ?? row.id_tuc ?? row.id_esm ?? row.id_coh ?? index" @click="emit('rowClick', row)"
               class="transition-all duration-200 hover:bg-slate-50/50 dark:hover:bg-slate-900/30 cursor-pointer border-b border-slate-100 dark:border-slate-900 last:border-0">
               <TableCell v-for="col in columns" :key="col.key"
                 :class="[alignClass(col.align), col.maxWidth ? `${col.maxWidth} truncate` : '']" 

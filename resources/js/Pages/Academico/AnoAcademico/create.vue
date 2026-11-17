@@ -3,28 +3,33 @@
  * Vista Standalone: Creación de Año Académico (Módulo: Estructura Académica).
  *
  * Propósito: Formulario para registrar un nuevo año académico regular en el sistema.
+ *
+ * Historial:
+ *  - 2026-11-14: Alineado a esquema `sogac_mio.sql` (`id_ana`, `nombre_ana`, `fecha_inicio_ana`,
+ *    `fecha_fin_ana`, `status_id`).
+ *  - 2026-11-16: Estandarización del pie de formulario con <CrudFormFooter />.
  */
 import { Head, Link, useForm } from '@inertiajs/vue3';
+import {
+    AlertCircle,
+    AlertTriangle,
+    ArrowLeft,
+    Calendar,
+    CalendarDays,
+} from 'lucide-vue-next';
 import { route } from 'ziggy-js';
-import AppLayout from '@/layouts/AppLayout.vue';
 import { Button } from '@/components/ui/button';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
+import CrudFormFooter from '@/components/ui/CrudFormFooter.vue';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
+import AppLayout from '@/layouts/AppLayout.vue';
 import type { BreadcrumbItem } from '@/types/navigation';
-import {
-    Calendar,
-    ArrowLeft,
-    Save,
-    AlertCircle,
-    CalendarDays,
-    AlertTriangle,
-} from 'lucide-vue-next';
 
 interface AnoActivo {
-    id_ano: number;
-    nombre_ano: string;
+    id_ana: number;
+    nombre_ana: string;
 }
 
 const props = defineProps<{
@@ -39,10 +44,10 @@ const breadcrumbs: BreadcrumbItem[] = [
 ];
 
 const form = useForm({
-    nombre_ano: '',
-    fecha_inicio_ano: '',
-    fecha_fin_ano: '',
-    status: props.anoActivo ? false : true,
+    nombre_ana: '',
+    fecha_inicio_ana: '',
+    fecha_fin_ana: '',
+    status_id: props.anoActivo ? 2 : 1,
     cerrar_anterior: false,
     guardar_desactivado: false,
 });
@@ -99,29 +104,29 @@ const submit = (cerrarAnterior = false) => {
                     <CardContent class="space-y-5 pt-2">
                         <!-- MENSAJE DE ERROR GLOBAL -->
                         <div
-                            v-if="form.errors.error"
+                            v-if="form.errors.error || (form.errors as Record<string, string>).status_id"
                             class="p-3 bg-red-50 text-red-700 text-sm rounded-lg flex items-center gap-2 border border-red-200 dark:bg-red-950/30 dark:text-red-400 dark:border-red-900"
                         >
                             <AlertCircle class="h-4 w-4 shrink-0" />
-                            <span>{{ form.errors.error }}</span>
+                            <span>{{ form.errors.error || (form.errors as Record<string, string>).status_id }}</span>
                         </div>
 
                         <!-- CAMPO: NOMBRE DEL AÑO ACADÉMICO -->
                         <div class="space-y-2">
-                            <Label for="nombre_ano" class="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                            <Label for="nombre_ana" class="text-sm font-semibold text-slate-700 dark:text-slate-300">
                                 Nombre del Año Académico <span class="text-red-500">*</span>
                             </Label>
                             <Input
-                                id="nombre_ano"
-                                v-model="form.nombre_ano"
+                                id="nombre_ana"
+                                v-model="form.nombre_ana"
                                 type="text"
                                 placeholder="Ej. 2026, Año Académico 2026-2027"
                                 class="h-10"
-                                :class="{ 'border-red-500 focus-visible:ring-red-500': form.errors.nombre_ano }"
+                                :class="{ 'border-red-500 focus-visible:ring-red-500': form.errors.nombre_ana }"
                                 required
                             />
-                            <p v-if="form.errors.nombre_ano" class="text-xs text-red-500">
-                                {{ form.errors.nombre_ano }}
+                            <p v-if="form.errors.nombre_ana" class="text-xs text-red-500">
+                                {{ form.errors.nombre_ana }}
                             </p>
                         </div>
 
@@ -129,37 +134,37 @@ const submit = (cerrarAnterior = false) => {
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <!-- FECHA INICIO -->
                             <div class="space-y-2">
-                                <Label for="fecha_inicio_ano" class="text-sm font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                                <Label for="fecha_inicio_ana" class="text-sm font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
                                     <CalendarDays class="h-4 w-4 text-muted-foreground" />
                                     Fecha de Inicio
                                 </Label>
                                 <Input
-                                    id="fecha_inicio_ano"
-                                    v-model="form.fecha_inicio_ano"
+                                    id="fecha_inicio_ana"
+                                    v-model="form.fecha_inicio_ana"
                                     type="date"
                                     class="h-10"
-                                    :class="{ 'border-red-500 focus-visible:ring-red-500': form.errors.fecha_inicio_ano }"
+                                    :class="{ 'border-red-500 focus-visible:ring-red-500': form.errors.fecha_inicio_ana }"
                                 />
-                                <p v-if="form.errors.fecha_inicio_ano" class="text-xs text-red-500">
-                                    {{ form.errors.fecha_inicio_ano }}
+                                <p v-if="form.errors.fecha_inicio_ana" class="text-xs text-red-500">
+                                    {{ form.errors.fecha_inicio_ana }}
                                 </p>
                             </div>
 
                             <!-- FECHA FIN -->
                             <div class="space-y-2">
-                                <Label for="fecha_fin_ano" class="text-sm font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                                <Label for="fecha_fin_ana" class="text-sm font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
                                     <CalendarDays class="h-4 w-4 text-muted-foreground" />
                                     Fecha de Finalización
                                 </Label>
                                 <Input
-                                    id="fecha_fin_ano"
-                                    v-model="form.fecha_fin_ano"
+                                    id="fecha_fin_ana"
+                                    v-model="form.fecha_fin_ana"
                                     type="date"
                                     class="h-10"
-                                    :class="{ 'border-red-500 focus-visible:ring-red-500': form.errors.fecha_fin_ano }"
+                                    :class="{ 'border-red-500 focus-visible:ring-red-500': form.errors.fecha_fin_ana }"
                                 />
-                                <p v-if="form.errors.fecha_fin_ano" class="text-xs text-red-500">
-                                    {{ form.errors.fecha_fin_ano }}
+                                <p v-if="form.errors.fecha_fin_ana" class="text-xs text-red-500">
+                                    {{ form.errors.fecha_fin_ana }}
                                 </p>
                             </div>
                         </div>
@@ -167,28 +172,28 @@ const submit = (cerrarAnterior = false) => {
                         <!-- ESTATUS OPERATIVO (TOGGLE) -->
                         <div class="flex items-center justify-between rounded-lg border p-3 shadow-xs">
                             <div class="space-y-0.5">
-                                <Label for="status" class="text-sm font-medium text-slate-700 dark:text-slate-300">
+                                <Label for="status_id" class="text-sm font-medium text-slate-700 dark:text-slate-300">
                                     Estatus del Año Académico
                                 </Label>
                                 <p class="text-xs text-muted-foreground">
-                                    {{ form.status ? 'El año académico estará Activo para vincular lapsos lectivos.' : 'El año académico estará Inactivo.' }}
+                                    {{ form.status_id === 1 ? 'El año académico estará Activo para vincular lapsos lectivos.' : 'El año académico estará Inactivo.' }}
                                 </p>
                             </div>
                             <div class="flex items-center gap-2">
                                 <Switch
-                                    id="status"
-                                    :checked="form.status"
-                                    @update:checked="(val: boolean) => form.status = val"
+                                    id="status_id"
+                                    :checked="form.status_id === 1"
+                                    @update:checked="(val: boolean) => form.status_id = val ? 1 : 2"
                                 />
-                                <span class="text-xs font-semibold" :class="form.status ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500'">
-                                    {{ form.status ? 'Activo' : 'Inactivo' }}
+                                <span class="text-xs font-semibold" :class="form.status_id === 1 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500'">
+                                    {{ form.status_id === 1 ? 'Activo' : 'Inactivo' }}
                                 </span>
                             </div>
                         </div>
 
                         <!-- ALERTA DE ACTIVACIÓN SI EXISTE OTRO AÑO EN CURSO -->
                         <div
-                            v-if="props.anoActivo && form.status"
+                            v-if="props.anoActivo && form.status_id === 1"
                             class="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-900/50 p-4 space-y-2.5 transition-all"
                         >
                             <div class="flex items-center gap-2 text-amber-800 dark:text-amber-300 font-semibold text-sm">
@@ -196,7 +201,7 @@ const submit = (cerrarAnterior = false) => {
                                 <span>Alerta de Activación: Año Académico en Curso Detectado</span>
                             </div>
                             <p class="text-xs text-amber-700 dark:text-amber-400 leading-relaxed">
-                                Actualmente el año académico <strong>"{{ props.anoActivo.nombre_ano }}"</strong> se encuentra en curso (Activo).
+                                Actualmente el año académico <strong>"{{ props.anoActivo.nombre_ana }}"</strong> se encuentra en curso (Activo).
                                 El sistema exige cerrar el año anterior para activar este nuevo período, o puede registrarlo como desactivado.
                             </p>
                             <div class="flex flex-wrap items-center gap-2 pt-1">
@@ -205,7 +210,7 @@ const submit = (cerrarAnterior = false) => {
                                     size="sm"
                                     variant="outline"
                                     class="text-xs h-8 border-amber-300 text-amber-900 hover:bg-amber-100 dark:border-amber-800 dark:text-amber-200"
-                                    @click="form.status = false"
+                                    @click="form.status_id = 2"
                                 >
                                     Registrar como Desactivado
                                 </Button>
@@ -215,22 +220,17 @@ const submit = (cerrarAnterior = false) => {
                                     class="text-xs h-8 bg-amber-600 hover:bg-amber-700 text-white shadow-xs"
                                     @click="submit(true)"
                                 >
-                                    Cerrar "{{ props.anoActivo.nombre_ano }}" y Activar Este
+                                    Cerrar "{{ props.anoActivo.nombre_ana }}" y Activar Este
                                 </Button>
                             </div>
                         </div>
                     </CardContent>
 
-                    <CardFooter class="flex items-center justify-end gap-2 border-t pt-4 dark:border-slate-800">
-                        <Button as-child variant="outline" type="button">
-                            <Link :href="route('academico.ano-academico.index')">
-                                Cancelar
-                            </Link>
-                        </Button>
-                        <Button type="submit" :disabled="form.processing" class="shadow-sm">
-                            <Save class="h-4 w-4 mr-2" />
-                            {{ form.processing ? 'Guardando...' : 'Guardar' }}
-                        </Button>
+                    <CardFooter class="border-t border-slate-100 bg-muted/20 px-6 py-4 dark:border-slate-800/60">
+                        <CrudFormFooter
+                            :cancel-href="route('academico.ano-academico.index')"
+                            :processing="form.processing"
+                        />
                     </CardFooter>
                 </form>
             </Card>

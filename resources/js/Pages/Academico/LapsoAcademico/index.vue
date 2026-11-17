@@ -2,47 +2,50 @@
 /**
  * Vista de Listado: Gestión de Lapsos Académicos (Módulo: Estructura Académica).
  *
- * Propósito: Muestra el catálogo de lapsos académicos vinculados a sus respectivos
- * años académicos, permitiendo búsqueda, filtrado por año y estatus, paginación y acciones.
+ * Propósito: Muestra el catálogo de lapsos académicos (`lapso_academico`) vinculados a sus
+ * años académicos y tipos de lapso, permitiendo búsqueda, filtrado y alternado de estatus.
  *
- * Actualización (Interruptor de Estado - StatusSwitch):
- * Se incorporó el suiche interactivo en la columna de Estatus para activar y desactivar
- * lapsos académicos directamente con confirmación modal.
+ * Historial:
+ *  - 2026-11-14: Alineado a `sogac_mio.sql` (`id_laa`, `ana_id`, `tla_id`, `codigo_laa`,
+ *    `nombre_laa`, `fecha_inicio_laa`, `fecha_fin_laa`, `status_id` con `@/lib/status`).
+ *  - 2026-11-16: Estandarización de acciones de tabla con <CrudActionButtons />.
  */
-import { computed } from 'vue';
 import { Head, Link, router } from '@inertiajs/vue3';
+import { Clock, Plus, X } from 'lucide-vue-next';
 import { route } from 'ziggy-js';
-import { Plus, X, Eye, Pencil, Power, Clock } from 'lucide-vue-next';
 
 // Layout e UI Reutilizable
-import AppLayout from '@/layouts/AppLayout.vue';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableEmpty } from '@/components/ui/table';
-import DataPagination from '@/components/ui/DataPagination.vue';
-import SuccessAlert from '@/components/ui/SuccessAlert.vue';
-import Badge from '@/components/ui/badge/Badge.vue';
-import StatusSwitch from '@/components/ui/StatusSwitch.vue';
 import { Button } from '@/components/ui/button';
-import TableSkeleton from '@/components/ui/TableSkeleton.vue';
-
-// Filtros
+import CrudActionButtons from '@/components/ui/CrudActionButtons.vue';
+import DataPagination from '@/components/ui/DataPagination.vue';
 import SearchFilter from '@/components/ui/filters/SearchFilter.vue';
 import TabFilter from '@/components/ui/filters/TabFilter.vue';
+import StatusSwitch from '@/components/ui/StatusSwitch.vue';
+import SuccessAlert from '@/components/ui/SuccessAlert.vue';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableEmpty } from '@/components/ui/table';
+import TableSkeleton from '@/components/ui/TableSkeleton.vue';
 
 // Composables y Tipos
+import { useConfirmDialog } from '@/composables/useConfirmDialog';
 import { useDataFetching } from '@/composables/useDataFetching';
 import { useFlashAlert } from '@/composables/useFlashAlert';
-import { useConfirmDialog } from '@/composables/useConfirmDialog';
+import AppLayout from '@/layouts/AppLayout.vue';
+import { esActivo } from '@/lib/status';
 import type { BreadcrumbItem } from '@/types/navigation';
 
 export interface LapsoAcademicoItem {
-    id_la: number;
-    ano_id?: number | null;
-    nombre_la: string;
-    fecha_inicio_la?: string | null;
-    fecha_fin_la?: string | null;
-    estado_la: boolean | number;
-    nombre_ano?: string | null;
-    ano_status?: boolean | number;
+    id_laa: number;
+    tla_id?: number | null;
+    ana_id?: number | null;
+    codigo_laa?: string | null;
+    nombre_laa: string;
+    fecha_inicio_laa?: string | null;
+    fecha_fin_laa?: string | null;
+    fase_operativa_laa?: string | null;
+    status_id: number;
+    nombre_ana?: string | null;
+    ano_status_id?: number | null;
+    nombre_tla?: string | null;
 }
 
 const props = defineProps<{
@@ -56,13 +59,13 @@ const props = defineProps<{
         to: number;
     };
     anosSelect?: Array<{
-        id_ano: number;
-        nombre_ano: string;
+        id_ana: number;
+        nombre_ana: string;
     }>;
     filters?: {
         search?: string;
-        ano_id?: number | string;
-        estado_la?: string;
+        ana_id?: number | string;
+        status_id?: string;
         per_page?: number | string;
     };
 }>();
@@ -95,25 +98,16 @@ const cambiarPorPagina = (nuevaCantidad: string | number) => {
     changePerPage(String(nuevaCantidad));
 };
 
-const isActivo = (item: LapsoAcademicoItem) => {
-    const val = item.estado_la;
-    return val === true || val === 1 || val === '1' || val === 'true';
-};
+const isActivo = (item: LapsoAcademicoItem) => esActivo(item);
 
 const handleToggleStatus = async (item: LapsoAcademicoItem) => {
     const activo = isActivo(item);
     const accion = activo ? 'desactivar' : 'activar';
     const advertencia = activo ? ' Al desactivarlo, sus cohortes y asignaciones de sede asociadas también se desactivarán en cascada.' : '';
-    if (await confirmDialog(`¿Está seguro de que desea ${accion} el lapso académico "${item.nombre_la}"?${advertencia}`)) {
-        router.patch(route('academico.lapso-academico.alternar-estatus', item.id_la), {}, {
+    if (await confirmDialog(`¿Está seguro de que desea ${accion} el lapso académico "${item.nombre_laa}"?${advertencia}`)) {
+        router.patch(route('academico.lapso-academico.alternar-estatus', item.id_laa), {}, {
             preserveScroll: true,
         });
-    }
-};
-
-const eliminarRegistro = async (ruta: string) => {
-    if (await confirmDialog('¿Estás seguro de que deseas eliminar este registro? Desaparecerá de la lista.')) {
-        router.delete(ruta, { preserveScroll: true });
     }
 };
 </script>
@@ -149,9 +143,9 @@ const eliminarRegistro = async (ruta: string) => {
                 </div>
 
                 <div class="flex items-center gap-2">
-                    <Button as-child size="default" class="shadow-sm">
+                    <Button as-child size="default" class="gap-2 shadow-sm">
                         <Link :href="route('academico.lapso-academico.create')">
-                            <Plus class="h-4 w-4 mr-2" />
+                            <Plus class="h-4 w-4" />
                             Nuevo Lapso Académico
                         </Link>
                     </Button>
@@ -171,17 +165,17 @@ const eliminarRegistro = async (ruta: string) => {
 
                     <div class="w-full sm:w-60">
                         <select
-                            :value="filterValues.ano_id ?? 'all'"
+                            :value="filterValues.ana_id ?? 'all'"
                             class="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                            @change="setFilter('ano_id', ($event.target as HTMLSelectElement).value)"
+                            @change="setFilter('ana_id', ($event.target as HTMLSelectElement).value)"
                         >
                             <option value="all">Todos los años académicos</option>
                             <option
                                 v-for="ano in props.anosSelect"
-                                :key="ano.id_ano"
-                                :value="ano.id_ano"
+                                :key="ano.id_ana"
+                                :value="ano.id_ana"
                             >
-                                {{ ano.nombre_ano }}
+                                {{ ano.nombre_ana }}
                             </option>
                         </select>
                     </div>
@@ -189,14 +183,14 @@ const eliminarRegistro = async (ruta: string) => {
 
                 <div class="flex items-center gap-2">
                     <TabFilter
-                        :model-value="filterValues.estado_la ?? 'all'"
+                        :model-value="filterValues.status_id ?? 'all'"
                         :options="[
                             { value: 'all', label: 'Todos' },
-                            { value: 'true', label: 'Activos' },
-                            { value: 'false', label: 'Inactivos' },
+                            { value: '1', label: 'Activos' },
+                            { value: '2', label: 'Inactivos' },
                         ]"
                         default-value="all"
-                        @update:model-value="(val: string) => setFilter('estado_la', val)"
+                        @update:model-value="(val: string) => setFilter('status_id', val)"
                     />
 
                     <Button
@@ -217,12 +211,12 @@ const eliminarRegistro = async (ruta: string) => {
                 <TableSkeleton
                     v-if="isLoading"
                     :columns="[
-                        { key: 'id_la', label: 'ID' },
-                        { key: 'nombre_ano', label: 'Año Padre' },
-                        { key: 'nombre_la', label: 'Nombre Lapso' },
-                        { key: 'fecha_inicio_la', label: 'Inicio' },
-                        { key: 'fecha_fin_la', label: 'Fin' },
-                        { key: 'estado_la', label: 'Estatus' },
+                        { key: 'id_laa', label: 'ID' },
+                        { key: 'nombre_ana', label: 'Año Padre' },
+                        { key: 'nombre_laa', label: 'Nombre Lapso' },
+                        { key: 'fecha_inicio_laa', label: 'Inicio' },
+                        { key: 'fecha_fin_laa', label: 'Fin' },
+                        { key: 'status_id', label: 'Estatus' },
                         { key: 'actions', label: 'Acciones' },
                     ]"
                     :skeleton-rows="5"
@@ -243,82 +237,50 @@ const eliminarRegistro = async (ruta: string) => {
                     <TableBody>
                         <TableRow
                             v-for="item in props.lapsos?.data || []"
-                            :key="item.id_la"
+                            :key="item.id_laa"
                             class="transition-all duration-200 hover:bg-slate-50/50 dark:hover:bg-slate-900/30 border-b border-slate-100 dark:border-slate-900 last:border-0"
                         >
                             <TableCell class="py-3.5 px-4 text-center font-mono text-xs text-muted-foreground">
-                                {{ item.id_la }}
+                                {{ item.id_laa }}
                             </TableCell>
 
                             <TableCell class="py-3.5 px-4 font-medium text-slate-700 dark:text-slate-300">
                                 <span class="font-mono text-xs font-semibold px-2 py-0.5 rounded bg-muted text-foreground">
-                                    {{ item.nombre_ano || 'Sin asignar' }}
+                                    {{ item.nombre_ana || 'Sin asignar' }}
                                 </span>
                             </TableCell>
 
                             <TableCell class="py-3.5 px-4 font-semibold text-slate-900 dark:text-slate-100">
-                                {{ item.nombre_la }}
+                                <div>{{ item.nombre_laa }}</div>
+                                <div v-if="item.codigo_laa || item.nombre_tla" class="text-xs font-normal text-muted-foreground">
+                                    {{ [item.codigo_laa, item.nombre_tla].filter(Boolean).join(' · ') }}
+                                </div>
                             </TableCell>
 
                             <TableCell class="py-3.5 px-4 text-muted-foreground">
-                                {{ item.fecha_inicio_la || 'N/A' }}
+                                {{ item.fecha_inicio_laa || 'N/A' }}
                             </TableCell>
 
                             <TableCell class="py-3.5 px-4 text-muted-foreground">
-                                {{ item.fecha_fin_la || 'N/A' }}
+                                {{ item.fecha_fin_laa || 'N/A' }}
                             </TableCell>
 
                             <TableCell class="py-3.5 px-4 text-center">
                                 <StatusSwitch
-                                    :status="item.estado_la"
+                                    :status="isActivo(item)"
                                     @toggle="handleToggleStatus(item)"
                                 />
                             </TableCell>
 
                             <TableCell class="py-3.5 px-4 text-center">
-                                <div class="flex items-center justify-center gap-1.5">
-                                    <!-- Botón Ver Detalle -->
-                                    <Button
-                                        as-child
-                                        variant="ghost"
-                                        size="icon"
-                                        class="h-8 w-8 text-slate-600 hover:text-primary dark:text-slate-400"
-                                        title="Ver detalle del lapso académico"
-                                    >
-                                        <Link :href="route('academico.lapso-academico.show', item.id_la)">
-                                            <Eye class="h-4 w-4" />
-                                        </Link>
-                                    </Button>
-
-                                    <!-- Botón Editar -->
-                                    <Button
-                                        as-child
-                                        variant="ghost"
-                                        size="icon"
-                                        class="h-8 w-8 text-amber-600 hover:text-amber-700 dark:text-amber-400"
-                                        title="Editar lapso académico"
-                                    >
-                                        <Link :href="route('academico.lapso-academico.edit', item.id_la)">
-                                            <Pencil class="h-4 w-4" />
-                                        </Link>
-                                    </Button>
-
-                                    <!-- Botón Eliminar -->
-                                    <button
-                                        type="button"
-                                        @click="eliminarRegistro(route('academico.lapso-academico.destroy', item.id_la))"
-                                        class="inline-flex items-center justify-center h-8 w-8 rounded-md text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:text-red-300 dark:hover:bg-red-950/50 transition-colors"
-                                        title="Eliminar registro"
-                                    >
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                            <path d="M3 6h18" />
-                                            <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
-                                            <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
-                                            <line x1="10" x2="10" y1="11" y2="17" />
-                                            <line x1="14" x2="14" y1="11" y2="17" />
-                                        </svg>
-                                    </button>
-                                </div>
+                                <CrudActionButtons
+                                    show-route="academico.lapso-academico.show"
+                                    edit-route="academico.lapso-academico.edit"
+                                    delete-route="academico.lapso-academico.destroy"
+                                    :record-id="item.id_laa"
+                                    :record-name="item.nombre_laa"
+                                    confirm-message="¿Estás seguro de que deseas eliminar este registro? Desaparecerá de la lista."
+                                />
                             </TableCell>
                         </TableRow>
 

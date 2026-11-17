@@ -46,7 +46,7 @@ class StorePaisRequest extends FormRequest
                 'min:2',
                 'max:255',
                 'regex:/^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s\-\']+$/',
-                'unique:pais,nombre_pai',
+                \Illuminate\Validation\Rule::unique('pais', 'nombre_pai')->whereNull('deleted_at'),
             ],
         ];
     }

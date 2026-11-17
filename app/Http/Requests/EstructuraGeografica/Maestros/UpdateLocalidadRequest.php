@@ -49,7 +49,7 @@ class UpdateLocalidadRequest extends FormRequest
             'par_id' => [
                 'required',
                 'integer',
-                'exists:parroquia,id_par',
+                Rule::exists('parroquia', 'id_par')->whereNull('deleted_at'),
             ],
             'nombre_loc' => [
                 'required',
@@ -59,13 +59,15 @@ class UpdateLocalidadRequest extends FormRequest
                 'regex:/^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s\-\']+$/',
                 Rule::unique('localidad', 'nombre_loc')
                     ->where(function ($query) {
-                        return $query->where('par_id', $this->input('par_id'));
+                        return $query->where('par_id', $this->input('par_id'))
+                            ->whereNull('deleted_at');
                     })
                     ->ignore($localidadId, 'id_loc'),
             ],
-            'status' => [
+            'status_id' => [
                 'sometimes',
-                'boolean',
+                'integer',
+                'exists:status,id_sta',
             ],
         ];
     }
@@ -87,7 +89,8 @@ class UpdateLocalidadRequest extends FormRequest
             'nombre_loc.max'      => 'El nombre de la localidad no puede exceder los 255 caracteres.',
             'nombre_loc.regex'    => 'El nombre de la localidad solo debe contener letras, espacios, guiones o apóstrofes (sin números).',
             'nombre_loc.unique'   => 'Ya existe otra localidad registrada con este nombre en la parroquia seleccionada.',
-            'status.boolean'      => 'El estado debe ser verdadero o falso.',
+            'status_id.integer'   => 'El estatus seleccionado debe ser un identificador entero válido.',
+            'status_id.exists'    => 'El estatus seleccionado no existe en el catálogo del sistema.',
         ];
     }
 }

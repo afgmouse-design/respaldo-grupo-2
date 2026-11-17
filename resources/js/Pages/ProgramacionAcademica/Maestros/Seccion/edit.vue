@@ -3,44 +3,64 @@
  * Vista Standalone: Editar Sección (Programación Académica).
  *
  * Propósito: Modificación de los parámetros de una sección existente mediante navegación directa SPA.
+ *
+ * Historial:
+ * - 2026-11-16: Estandarización del pie de formulario con <CrudFormFooter />.
  */
-import { computed } from 'vue';
 import { Head, Link, useForm } from '@inertiajs/vue3';
+import { ArrowLeft, Users } from 'lucide-vue-next';
+import { computed } from 'vue';
 import { route } from 'ziggy-js';
-import AppLayout from '@/layouts/AppLayout.vue';
 import { Button } from '@/components/ui/button';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
+import CrudFormFooter from '@/components/ui/CrudFormFooter.vue';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
+import AppLayout from '@/layouts/AppLayout.vue';
+import {
+    obtenerIdPrograma,
+    obtenerNombrePrograma,
+} from '@/lib/academico';
+import type { ProgramaCatalogoItem } from '@/lib/academico';
 import type { BreadcrumbItem } from '@/types/navigation';
-import { ArrowLeft, Save, Users } from 'lucide-vue-next';
 
 interface SeccionItem {
     id_sec: number;
     codigo_sec?: string | null;
     nombre_sec: string;
+    tis_id?: number | null;
     tipo_seccion?: string;
     trayecto_sec?: number;
     semestre_sec?: number;
     nivel_sec?: number;
+    tur_id?: number | null;
     turno_sec: string;
     cupo_maximo_sec: number;
     laa_id: number;
-    pnf_id: number;
+    prg_id?: number;
+    pnf_id?: number;
     sed_id: number;
     cos_id?: number | null;
     mac_id?: number | null;
+    status_id?: number;
     status?: boolean;
 }
 
 const props = defineProps<{
     seccion: SeccionItem;
-    lapsos: Array<{ id_la: number; nombre_la: string }>;
-    pnfs: Array<{ id_pnf: number; nombre_pnf: string; codigo_pnf?: string }>;
+    lapsos: Array<{ id_laa?: number; id_la?: number; nombre_laa?: string; nombre_la?: string }>;
+    programas?: ProgramaCatalogoItem[];
+    pnfs?: ProgramaCatalogoItem[];
     sedes: Array<{ id_sed: number; nombre_sed: string }>;
     cohortes?: Array<{ id_cos: number; nombre_cos: string; sep_id: number }>;
-    mallas?: Array<{ id_mac: number; nombre_mac: string; pnf_id: number }>;
+    mallas?: Array<{ id_mac: number; nombre_mac: string; prg_id?: number; pnf_id?: number }>;
+    tiposSeccion?: Array<{ id_tis: number; codigo_tis: string; nombre_tis: string }>;
+    turnos?: Array<{ id_tur: number; codigo_tur: string; nombre_tur: string }>;
 }>();
+
+const catalogoProgramas = computed(() => props.programas ?? props.pnfs ?? []);
+const obtenerIdLapsoOpt = (l: { id_laa?: number; id_la?: number }) => l.id_laa ?? l.id_la ?? 0;
+const obtenerNombreLapsoOpt = (l: { nombre_laa?: string; nombre_la?: string }) => l.nombre_laa ?? l.nombre_la ?? '';
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Dashboard', subtitle: 'Panel Principal', href: route('dashboard') },
@@ -52,22 +72,24 @@ const breadcrumbs: BreadcrumbItem[] = [
 const form = useForm({
     codigo_sec: props.seccion.codigo_sec || props.seccion.nombre_sec,
     nombre_sec: props.seccion.nombre_sec || '',
+    tis_id: props.seccion.tis_id ?? '',
     tipo_seccion: props.seccion.tipo_seccion || 'Regular',
     trayecto_sec: props.seccion.trayecto_sec ?? 1,
     semestre_sec: props.seccion.semestre_sec ?? 1,
     nivel_sec: props.seccion.nivel_sec ?? 1,
+    tur_id: props.seccion.tur_id ?? '',
     turno_sec: props.seccion.turno_sec || 'Mañana',
     cupo_maximo_sec: props.seccion.cupo_maximo_sec || 35,
     laa_id: props.seccion.laa_id,
-    pnf_id: props.seccion.pnf_id,
+    prg_id: props.seccion.prg_id ?? props.seccion.pnf_id ?? '',
     sed_id: props.seccion.sed_id,
     cos_id: props.seccion.cos_id || '',
     mac_id: props.seccion.mac_id || '',
 });
 
 const mallasDisponibles = computed(() => {
-    if (!form.pnf_id || !props.mallas) return props.mallas || [];
-    return props.mallas.filter((m) => Number(m.pnf_id) === Number(form.pnf_id));
+    if (!form.prg_id || !props.mallas) return props.mallas || [];
+    return props.mallas.filter((m) => Number(m.prg_id ?? m.pnf_id ?? 0) === Number(form.prg_id));
 });
 
 const submit = () => {
@@ -140,8 +162,20 @@ const submit = () => {
                             </div>
 
                             <div class="space-y-2">
-                                <Label for="tipo_seccion">Tipo de Sección *</Label>
+                                <Label for="tis_id">Tipo de Sección *</Label>
                                 <select
+                                    v-if="tiposSeccion?.length"
+                                    id="tis_id"
+                                    v-model="form.tis_id"
+                                    class="w-full h-10 px-3 py-2 rounded-md border border-input bg-background text-sm"
+                                    :class="{ 'border-red-500': form.errors.tis_id || form.errors.tipo_seccion }"
+                                >
+                                    <option v-for="t in tiposSeccion" :key="t.id_tis" :value="t.id_tis">
+                                        {{ t.nombre_tis }} ({{ t.codigo_tis }})
+                                    </option>
+                                </select>
+                                <select
+                                    v-else
                                     id="tipo_seccion"
                                     v-model="form.tipo_seccion"
                                     class="w-full h-10 px-3 py-2 rounded-md border border-input bg-background text-sm"
@@ -151,12 +185,25 @@ const submit = () => {
                                     <option value="PER">Plan Especial de Referencia (PER)</option>
                                     <option value="Repitiente">Repitiente</option>
                                     <option value="Dirigido">Dirigido</option>
+                                    <option value="Intensivo">Intensivo</option>
                                 </select>
                             </div>
 
                             <div class="space-y-2">
-                                <Label for="turno_sec">Turno de Clases *</Label>
+                                <Label for="tur_id">Turno de Clases *</Label>
                                 <select
+                                    v-if="turnos?.length"
+                                    id="tur_id"
+                                    v-model="form.tur_id"
+                                    class="w-full h-10 px-3 py-2 rounded-md border border-input bg-background text-sm"
+                                    :class="{ 'border-red-500': form.errors.tur_id || form.errors.turno_sec }"
+                                >
+                                    <option v-for="tr in turnos" :key="tr.id_tur" :value="tr.id_tur">
+                                        {{ tr.nombre_tur }} ({{ tr.codigo_tur }})
+                                    </option>
+                                </select>
+                                <select
+                                    v-else
                                     id="turno_sec"
                                     v-model="form.turno_sec"
                                     class="w-full h-10 px-3 py-2 rounded-md border border-input bg-background text-sm"
@@ -177,8 +224,8 @@ const submit = () => {
                                     v-model="form.laa_id"
                                     class="w-full h-10 px-3 py-2 rounded-md border border-input bg-background text-sm"
                                 >
-                                    <option v-for="lapso in lapsos" :key="lapso.id_la" :value="lapso.id_la">
-                                        {{ lapso.nombre_la }}
+                                    <option v-for="lapso in lapsos" :key="obtenerIdLapsoOpt(lapso)" :value="obtenerIdLapsoOpt(lapso)">
+                                        {{ obtenerNombreLapsoOpt(lapso) }}
                                     </option>
                                 </select>
                             </div>
@@ -214,14 +261,14 @@ const submit = () => {
 
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4 border-t pt-4 dark:border-slate-800">
                             <div class="space-y-2">
-                                <Label for="pnf_id">Programa Nacional de Formación (PNF) *</Label>
+                                <Label for="prg_id">Programa Académico *</Label>
                                 <select
-                                    id="pnf_id"
-                                    v-model="form.pnf_id"
+                                    id="prg_id"
+                                    v-model="form.prg_id"
                                     class="w-full h-10 px-3 py-2 rounded-md border border-input bg-background text-sm"
                                 >
-                                    <option v-for="pnf in pnfs" :key="pnf.id_pnf" :value="pnf.id_pnf">
-                                        {{ pnf.nombre_pnf }}
+                                    <option v-for="prg in catalogoProgramas" :key="obtenerIdPrograma(prg)" :value="obtenerIdPrograma(prg)">
+                                        {{ obtenerNombrePrograma(prg) }}
                                     </option>
                                 </select>
                             </div>
@@ -280,14 +327,12 @@ const submit = () => {
                         </div>
                     </CardContent>
 
-                    <CardFooter class="flex justify-end gap-3 border-t pt-4 dark:border-slate-800">
-                        <Button as-child variant="outline">
-                            <Link :href="route('seccion.index')">Cancelar</Link>
-                        </Button>
-                        <Button type="submit" :disabled="form.processing" class="gap-2">
-                            <Save class="h-4 w-4" />
-                            <span>{{ form.processing ? 'Guardando...' : 'Actualizar Sección' }}</span>
-                        </Button>
+                    <CardFooter class="border-t border-slate-100 bg-muted/20 px-6 py-4 dark:border-slate-800/60">
+                        <CrudFormFooter
+                            :cancel-href="route('seccion.index')"
+                            :is-edit="true"
+                            :processing="form.processing"
+                        />
                     </CardFooter>
                 </form>
             </Card>

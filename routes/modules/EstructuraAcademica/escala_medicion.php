@@ -51,6 +51,7 @@ Route::prefix('academico/escala-medicion')->name('academico.escala-medicion.')->
     Route::get('/{escala_medicion}/edit', [EscalaMedicionController::class, 'edit'])->name('edit');
     Route::put('/{escala_medicion}', [EscalaMedicionController::class, 'update'])->name('update');
     Route::get('/{escala_medicion}', [EscalaMedicionController::class, 'show'])->name('show');
+    Route::patch('/{escala_medicion}/toggle-status', [EscalaMedicionController::class, 'toggleStatus'])->name('toggle_status');
     Route::delete('/{escala_medicion}', [EscalaMedicionController::class, 'destroy'])->name('destroy');
 });
 

@@ -3,16 +3,20 @@
  * Vista Standalone: Editar Cohorte por Sede (Programación Académica).
  *
  * Propósito: Modificación de la asignación de cohorte en sede mediante navegación directa SPA.
+ * Historial:
+ *  - 2026-11-14: Alineado a `sede_programa(id_spr)` preservando compatibilidad con `id_sep`.
+ *  - 2026-11-16: Estandarización del pie de formulario con <CrudFormFooter />.
  */
 import { Head, Link, useForm } from '@inertiajs/vue3';
+import { ArrowLeft, MapPin } from 'lucide-vue-next';
 import { route } from 'ziggy-js';
-import AppLayout from '@/layouts/AppLayout.vue';
 import { Button } from '@/components/ui/button';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
+import CrudFormFooter from '@/components/ui/CrudFormFooter.vue';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
+import AppLayout from '@/layouts/AppLayout.vue';
 import type { BreadcrumbItem } from '@/types/navigation';
-import { ArrowLeft, Save, MapPin } from 'lucide-vue-next';
 
 const props = defineProps<{
     cohorteSede: {
@@ -20,11 +24,14 @@ const props = defineProps<{
         nombre_cos: string;
         coh_id: number;
         sep_id: number;
+        status_id?: number;
         status?: boolean;
     };
     cohortes: Array<{ id_coh: number; nombre_coh: string }>;
-    ofertasSedePnf: Array<{ id_sep: number; descripcion_oferta: string }>;
+    ofertasSedePnf: Array<{ id_spr?: number; id_sep?: number; descripcion_oferta: string }>;
 }>();
+
+const resolverOfertaId = (o: { id_spr?: number; id_sep?: number }) => o.id_spr ?? o.id_sep ?? 0;
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Dashboard', subtitle: 'Panel Principal', href: route('dashboard') },
@@ -108,7 +115,7 @@ const submit = () => {
                                     class="w-full h-10 rounded-md border border-input bg-background px-3 text-sm focus:outline-hidden focus:ring-2 focus:ring-ring"
                                     :class="{ 'border-destructive': form.errors.sep_id }"
                                 >
-                                    <option v-for="o in ofertasSedePnf" :key="o.id_sep" :value="o.id_sep">
+                                    <option v-for="o in ofertasSedePnf" :key="resolverOfertaId(o)" :value="resolverOfertaId(o)">
                                         {{ o.descripcion_oferta }}
                                     </option>
                                 </select>
@@ -134,14 +141,12 @@ const submit = () => {
                         </div>
                     </CardContent>
 
-                    <CardFooter class="flex justify-end gap-3 border-t border-slate-100 dark:border-slate-800/60 pt-4">
-                        <Button as-child variant="outline" :disabled="form.processing">
-                            <Link :href="route('cohorte_sede.index')">Cancelar</Link>
-                        </Button>
-                        <Button type="submit" :disabled="form.processing" class="gap-2">
-                            <Save class="h-4 w-4" />
-                            <span>{{ form.processing ? 'Actualizando...' : 'Guardar Cambios' }}</span>
-                        </Button>
+                    <CardFooter class="border-t border-slate-100 bg-muted/20 px-6 py-4 dark:border-slate-800/60">
+                        <CrudFormFooter
+                            :cancel-href="route('cohorte_sede.index')"
+                            :is-edit="true"
+                            :processing="form.processing"
+                        />
                     </CardFooter>
                 </form>
             </Card>

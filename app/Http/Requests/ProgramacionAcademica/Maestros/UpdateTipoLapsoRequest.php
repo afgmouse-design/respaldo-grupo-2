@@ -3,41 +3,61 @@
 namespace App\Http\Requests\ProgramacionAcademica\Maestros;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
+/**
+ * FormRequest: Validación para la actualización de Tipos de Lapso Académico (`tipo_lapso`).
+ *
+ * Propósito: Validar cambios sobre `tipo_lapso(id_tla)` ignorando el registro actual en
+ * la verificación de unicidad de `codigo_tla`.
+ *
+ * Historial:
+ *  - 2026-11-14: Alineado a `id_tla`, `codigo_tla`, `nombre_tla`, `duracion_semanas_tla`,
+ *    `nomenclatura_tla`, `descripcion_tla` y `status_id`.
+ */
 class UpdateTipoLapsoRequest extends FormRequest
 {
-    /**
-     * Determine if the user is authorized to make this request.
-     */
     public function authorize(): bool
     {
         return true;
     }
 
-    /**
-     * Get the validation rules that apply to the request.
-     *
-     * @return array<string, \Illuminate\Contracts\Validation\ValidationRule|array<mixed>|string>
-     */
     public function rules(): array
     {
-        $tipoLapsoId = $this->route('tipo_lapso')->id ?? null;
+        $param = $this->route('tipo_lapso') ?? $this->route('id_tla');
+        $tipoLapsoId = is_object($param) ? ($param->id_tla ?? $param->id) : $param;
 
         return [
-            'tap_codigo' => 'required|integer|unique:tipo_lapsos,tap_codigo,' . $tipoLapsoId,
-            'tap_nombre' => 'required|string|min:2|max:255',
+            'codigo_tla' => [
+                'required',
+                'string',
+                'max:20',
+                Rule::unique('tipo_lapso', 'codigo_tla')
+                    ->ignore($tipoLapsoId, 'id_tla')
+                    ->whereNull('deleted_at'),
+            ],
+            'nombre_tla'           => 'required|string|min:2|max:100',
+            'duracion_semanas_tla' => 'required|integer|min:1|max:104',
+            'nomenclatura_tla'     => 'nullable|string|max:20',
+            'descripcion_tla'      => 'nullable|string|max:255',
+            'status_id'            => 'sometimes|integer|exists:status,id_sta',
         ];
     }
 
     public function messages(): array
     {
         return [
-            'tap_codigo.required' => 'El código es requerido',
-            'tap_codigo.integer' => 'El código debe ser numérico',
-            'tap_codigo.unique' => 'El código ya está registrado en otro tipo de lapso',
-            'tap_nombre.required' => 'El nombre es requerido',
-            'tap_nombre.min' => 'El nombre debe tener al menos 2 caracteres',
-            'tap_nombre.max' => 'El nombre no puede exceder 255 caracteres',
+            'codigo_tla.required'           => 'El código del tipo de lapso es obligatorio.',
+            'codigo_tla.max'                => 'El código no puede exceder los 20 caracteres.',
+            'codigo_tla.unique'             => 'El código ya está registrado en otro tipo de lapso.',
+            'nombre_tla.required'           => 'El nombre del tipo de lapso es obligatorio.',
+            'nombre_tla.min'                => 'El nombre debe tener al menos 2 caracteres.',
+            'nombre_tla.max'                => 'El nombre no puede exceder los 100 caracteres.',
+            'duracion_semanas_tla.required' => 'La duración en semanas es obligatoria.',
+            'duracion_semanas_tla.integer'  => 'La duración debe expresarse en semanas enteras.',
+            'nomenclatura_tla.max'          => 'La nomenclatura no puede exceder los 20 caracteres.',
+            'descripcion_tla.max'           => 'La descripción no puede exceder los 255 caracteres.',
+            'status_id.exists'              => 'El estatus seleccionado no existe en el catálogo del sistema.',
         ];
     }
 }

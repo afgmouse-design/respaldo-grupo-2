@@ -2,46 +2,36 @@
 
 namespace Database\Seeders\SeguridadYAccesos;
 
+use Database\Seeders\SeguridadYAccesos\Concerns\SincronizaPermisosModulo;
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 
 /**
- * Seeder: Permisos del maestro Aula (módulo Programación Académica).
- * Registra de forma idempotente aula.ver / crear / editar / eliminar.
+ * Seeder: Permisos del maestro Aula (`aula`).
+ *
+ * Propósito: Registra de forma idempotente `aula.ver/crear/editar/eliminar` en `permiso`
+ * vinculados al módulo `Programación Académica` y la vista `programacion.aula`.
+ *
+ * Historial:
+ *  - 2026-11-14: Migrado sobre `modulo(id_mod)`, `vista(id_vis)` y `permiso(clave_pmi)` vía `SincronizaPermisosModulo`.
  *
  * Ejecución: php artisan db:seed --class="Database\Seeders\SeguridadYAccesos\AulaPermisosSeeder"
  */
 class AulaPermisosSeeder extends Seeder
 {
+    use SincronizaPermisosModulo;
+
     public function run(): void
     {
-        if (!Schema::hasTable('modulo') || !Schema::hasTable('permiso')) {
-            $this->command->warn('Tablas "modulo" o "permiso" no existen en la BD actual. Omitiendo inserción de permisos.');
-            return;
-        }
-
-        $now = now();
-
-        DB::table('modulo')->updateOrInsert(
-            ['key' => 'programacion_academica'],
-            ['nombre' => 'Programación Académica', 'activo' => true, 'created_at' => $now, 'updated_at' => $now]
+        $this->sincronizarPermisosDeModulo(
+            'Programación Académica',
+            ['icono_mod' => 'Calendar', 'orden_mod' => 4],
+            [
+                'aula.ver'      => 'Ver aulas',
+                'aula.crear'    => 'Crear aulas',
+                'aula.editar'   => 'Editar aulas',
+                'aula.eliminar' => 'Activar/desactivar aulas',
+            ],
+            'programacion.aula'
         );
-        $moduloId = DB::table('modulo')->where('key', 'programacion_academica')->value('id_modulo');
-
-        $permisos = [
-            'aula.ver'      => 'Ver aulas',
-            'aula.crear'    => 'Crear aulas',
-            'aula.editar'   => 'Editar aulas',
-            'aula.eliminar' => 'Activar/desactivar aulas',
-        ];
-
-        foreach ($permisos as $key => $nombre) {
-            DB::table('permiso')->updateOrInsert(
-                ['key' => $key],
-                ['nombre' => $nombre, 'modulo_id' => $moduloId, 'activo' => true, 'created_at' => $now, 'updated_at' => $now]
-            );
-        }
     }
 }
-

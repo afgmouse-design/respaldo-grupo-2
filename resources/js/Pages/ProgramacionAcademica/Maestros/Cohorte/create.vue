@@ -3,19 +3,23 @@
  * Vista Standalone: Registrar Cohorte (Programación Académica).
  *
  * Propósito: Registro de una nueva cohorte académica vinculada a un lapso lectivo mediante navegación directa SPA.
+ *
+ * Historial:
+ * - 2026-11-16: Estandarización del pie de formulario con <CrudFormFooter />.
  */
 import { Head, Link, useForm } from '@inertiajs/vue3';
+import { ArrowLeft, GraduationCap } from 'lucide-vue-next';
 import { route } from 'ziggy-js';
-import AppLayout from '@/layouts/AppLayout.vue';
 import { Button } from '@/components/ui/button';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
+import CrudFormFooter from '@/components/ui/CrudFormFooter.vue';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
+import AppLayout from '@/layouts/AppLayout.vue';
 import type { BreadcrumbItem } from '@/types/navigation';
-import { ArrowLeft, Save, GraduationCap } from 'lucide-vue-next';
 
 defineProps<{
-    lapsos: Array<{ id_la: number; nombre_la: string; fecha_inicio_la: string; fecha_fin_la: string }>;
+    lapsos: Array<{ id_laa?: number; id_la?: number; nombre_laa?: string; nombre_la?: string; fecha_inicio_laa?: string; fecha_inicio_la?: string; fecha_fin_laa?: string; fecha_fin_la?: string }>;
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -86,8 +90,8 @@ const submit = () => {
                                     :class="{ 'border-destructive': form.errors.laa_id }"
                                 >
                                     <option value="" disabled>Seleccione el lapso académico...</option>
-                                    <option v-for="l in lapsos" :key="l.id_la" :value="l.id_la">
-                                        {{ l.nombre_la }} ({{ l.fecha_inicio_la }} al {{ l.fecha_fin_la }})
+                                    <option v-for="l in lapsos" :key="l.id_laa ?? l.id_la" :value="l.id_laa ?? l.id_la">
+                                        {{ l.nombre_laa ?? l.nombre_la }} ({{ l.fecha_inicio_laa ?? l.fecha_inicio_la }} al {{ l.fecha_fin_laa ?? l.fecha_fin_la }})
                                     </option>
                                 </select>
                                 <span v-if="form.errors.laa_id" class="text-xs text-destructive">
@@ -128,14 +132,11 @@ const submit = () => {
                         </div>
                     </CardContent>
 
-                    <CardFooter class="flex justify-end gap-3 border-t border-slate-100 dark:border-slate-800/60 pt-4">
-                        <Button as-child variant="outline" :disabled="form.processing">
-                            <Link :href="route('cohorte.index')">Cancelar</Link>
-                        </Button>
-                        <Button type="submit" :disabled="form.processing" class="gap-2">
-                            <Save class="h-4 w-4" />
-                            <span>{{ form.processing ? 'Guardando...' : 'Guardar Cohorte' }}</span>
-                        </Button>
+                    <CardFooter class="border-t border-slate-100 bg-muted/20 px-6 py-4 dark:border-slate-800/60">
+                        <CrudFormFooter
+                            :cancel-href="route('cohorte.index')"
+                            :processing="form.processing"
+                        />
                     </CardFooter>
                 </form>
             </Card>

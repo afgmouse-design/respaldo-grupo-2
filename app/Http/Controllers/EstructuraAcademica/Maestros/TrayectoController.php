@@ -5,7 +5,7 @@ namespace App\Http\Controllers\EstructuraAcademica\Maestros;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\EstructuraAcademica\Maestros\StoreTrayectoRequest;
 use App\Http\Requests\EstructuraAcademica\Maestros\UpdateTrayectoRequest;
-use App\Models\EstructuraAcademica\Maestros\TipoPeriodo;
+use App\Models\Academico\TipoLapso;
 use App\Models\EstructuraAcademica\Maestros\Trayecto;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -13,59 +13,59 @@ use Inertia\Inertia;
 use Inertia\Response;
 
 /**
- * Controlador: Maestro de Trayecto / Nivel Académico (Módulo: Estructura Académica / Régimen).
+ * Controlador: Maestro de Trayecto / Nivel Académico (`trayecto`).
  *
- * Arquitectura: Controlador Flaco (Skinny Controller).
- * No contiene consultas SQL, ni cláusulas where, ni llamadas directas a base de datos.
- * Delega toda la lógica de persistencia y consultas a los modelos Trayecto y TipoPeriodo.
+ * Propósito: Gestiona trayectos asociados al Tipo de Lapso (`tla_id`) mediante
+ * arquitectura Skinny Controller delegando al modelo `Trayecto`.
+ *
+ * Historial:
+ *  - 2026-11-14: Reemplazado `TipoPeriodo`/`tpd_id` por `TipoLapso`/`tla_id` y
+ *    habilitada la autorización formal vía `TrayectoPolicy`.
  */
 class TrayectoController extends Controller
 {
-    /**
-     * Muestra el listado de trayectos con filtros reactivos y paginación.
-     */
     public function index(Request $request): Response
     {
+        $this->authorize('viewAny', Trayecto::class);
+
         $perPage = (int) ($request->input('per_page') ?? $request->input('registros_per_page') ?? 10);
 
-        // Delegación de consultas a los modelos
         $trayectos = Trayecto::obtenerPaginados(
-            $request->only(['search', 'tpd_id', 'status']),
+            $request->only(['search', 'tla_id', 'tpd_id', 'status', 'status_id']),
             $perPage
         );
 
-        $tiposPeriodo = TipoPeriodo::obtenerActivosParaSelect();
+        $tiposLapso = TipoLapso::obtenerActivosParaSelect();
 
         return Inertia::render('Academico/Trayecto/index', [
             'trayectos'    => $trayectos,
-            'tiposPeriodo' => $tiposPeriodo,
+            'tiposLapso'   => $tiposLapso,
+            'tiposPeriodo' => $tiposLapso,
             'perPage'      => $perPage,
             'filters'      => array_merge(
-                $request->only(['search', 'tpd_id', 'status', 'per_page', 'registros_per_page']),
+                $request->only(['search', 'tla_id', 'tpd_id', 'status', 'status_id', 'per_page', 'registros_per_page']),
                 ['per_page' => $perPage, 'registros_per_page' => $perPage]
             ),
         ]);
     }
 
-    /**
-     * Muestra el formulario para registrar un nuevo trayecto.
-     */
     public function create(): Response
     {
-        $tiposPeriodo = TipoPeriodo::obtenerActivosParaSelect();
+        $this->authorize('create', Trayecto::class);
+
+        $tiposLapso = TipoLapso::obtenerActivosParaSelect();
 
         return Inertia::render('Academico/Trayecto/create', [
-            'tiposPeriodo' => $tiposPeriodo,
+            'tiposLapso'   => $tiposLapso,
+            'tiposPeriodo' => $tiposLapso,
         ]);
     }
 
-    /**
-     * Almacena un nuevo trayecto delegando al modelo.
-     */
     public function store(StoreTrayectoRequest $request): RedirectResponse
     {
+        $this->authorize('create', Trayecto::class);
+
         try {
-            // Delegación de inserción al modelo con registrarTrayecto()
             $trayecto = Trayecto::registrarTrayecto($request->validated(), auth()->id());
 
             return redirect()
@@ -79,39 +79,33 @@ class TrayectoController extends Controller
         }
     }
 
-    /**
-     * Muestra el detalle de un trayecto.
-     */
     public function show(int $id_tra): Response
     {
-        $trayecto = Trayecto::obtenerConRelaciones($id_tra);
+        $this->authorize('view', Trayecto::class);
 
         return Inertia::render('Academico/Trayecto/show', [
-            'trayecto' => $trayecto,
+            'trayecto' => Trayecto::obtenerConRelaciones($id_tra),
         ]);
     }
 
-    /**
-     * Muestra el formulario para editar un trayecto existente.
-     */
     public function edit(int $id_tra): Response
     {
-        $trayecto = Trayecto::obtenerParaEditar($id_tra);
-        $tiposPeriodo = TipoPeriodo::obtenerActivosParaSelect();
+        $this->authorize('update', Trayecto::class);
+
+        $tiposLapso = TipoLapso::obtenerActivosParaSelect();
 
         return Inertia::render('Academico/Trayecto/edit', [
-            'trayecto'     => $trayecto,
-            'tiposPeriodo' => $tiposPeriodo,
+            'trayecto'     => Trayecto::obtenerParaEditar($id_tra),
+            'tiposLapso'   => $tiposLapso,
+            'tiposPeriodo' => $tiposLapso,
         ]);
     }
 
-    /**
-     * Actualiza los datos de un trayecto existente delegando al modelo.
-     */
     public function update(UpdateTrayectoRequest $request, int $id_tra): RedirectResponse
     {
+        $this->authorize('update', Trayecto::class);
+
         try {
-            // Delegación de actualización al modelo con actualizarTrayecto()
             $trayecto = Trayecto::actualizarTrayecto($id_tra, $request->validated(), auth()->id());
 
             return redirect()
@@ -125,14 +119,12 @@ class TrayectoController extends Controller
         }
     }
 
-    /**
-     * Alterna el estatus lógico del trayecto (Activo / Inactivo).
-     */
     public function toggleStatus(int $id_tra): RedirectResponse
     {
+        $this->authorize('delete', Trayecto::class);
+
         try {
             $resultado = Trayecto::alternarEstatus($id_tra, auth()->id());
-
             $estadoTexto = $resultado['estatus'] ? 'activado' : 'inactivado';
 
             return redirect()
@@ -151,11 +143,26 @@ class TrayectoController extends Controller
     }
 
     /**
-     * Alterna el estatus lógico del trayecto (baja lógica).
+     * Ejecuta la eliminación lógica en interfaz (`deleted_at` + `status_id = 2`) del trayecto
+     * sin borrar filas físicas de PostgreSQL.
+     *
+     * Historial:
+     * - 2026-11-16: Desacoplado de `toggleStatus()` para realizar baja lógica real en interfaz.
      */
     public function destroy(int $id_tra): RedirectResponse
     {
-        return $this->toggleStatus($id_tra);
+        $this->authorize('delete', Trayecto::class);
+
+        try {
+            $resultado = Trayecto::eliminarConSoftDelete($id_tra, auth()->id());
+
+            return redirect()
+                ->back()
+                ->with('success', "El trayecto '{$resultado['nombre']}' ha sido eliminado exitosamente.");
+        } catch (\Throwable $e) {
+            return redirect()
+                ->back()
+                ->withErrors(['error' => 'No se pudo eliminar el trayecto: ' . $e->getMessage()]);
+        }
     }
 }
-

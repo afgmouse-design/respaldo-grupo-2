@@ -2,39 +2,44 @@
 /**
  * Vista Standalone: Horario De Docente (Informes)
  *
- * Propósito: Visualización e impresión de la carga horaria semanal y
- * distribución de bloques de un profesor para control institucional.
+ * Propósito: Visualización e impresión de la carga horaria semanal de un profesor (`persona_perfil.id_pep`).
+ *
+ * Historial:
+ *  - 2026-11-15: Alineado a `pep_id` (`persona_perfil.id_pep`), `horario(id_hor)` y `carga_academica`.
  */
 import { ref } from 'vue';
-import { Head, Link, router } from '@inertiajs/vue3';
+import { Head, router } from '@inertiajs/vue3';
 import { route } from 'ziggy-js';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { Button } from '@/components/ui/button';
-import Badge from '@/components/ui/badge/Badge.vue';
 import {
     UserCheck,
     Printer,
     Layers,
     School,
-    Clock,
 } from 'lucide-vue-next';
-
-interface DocenteItem {
-    id: number;
-    name: string;
-    email: string;
-}
+import {
+    coincideDiaHorario,
+    formatearHoraCorta,
+    obtenerAulaEtiqueta,
+    obtenerCorreoDocente,
+    obtenerIdDocente,
+    obtenerNombreDocente,
+    obtenerNombreMateriaHorario,
+    obtenerSeccionHorario,
+    type DocenteSelectOption,
+} from '@/lib/academico';
 
 const props = defineProps<{
-    docentes: DocenteItem[];
-    docenteSeleccionado?: DocenteItem | null;
+    docentes: DocenteSelectOption[];
+    docenteSeleccionado?: DocenteSelectOption | null;
     horarios: any[];
 }>();
 
-const docenteId = ref(props.docenteSeleccionado?.id ?? '');
+const docenteId = ref(obtenerIdDocente(props.docenteSeleccionado) || '');
 
 const cambiarDocente = () => {
-    router.get(route('informes.horario_docente'), { docente_id: docenteId.value || undefined }, { preserveState: true });
+    router.get(route('informes.horario_docente'), { pep_id: docenteId.value || undefined }, { preserveState: true });
 };
 
 const dias = [
@@ -46,8 +51,8 @@ const dias = [
     { id: 6, nombre: 'Sábado' },
 ];
 
-const getHorariosPorDia = (diaId: number) => {
-    return props.horarios.filter(h => h.dia_semana === diaId);
+const getHorariosPorDia = (diaId: number, diaNombre: string) => {
+    return props.horarios.filter((h) => coincideDiaHorario(h, diaId, diaNombre));
 };
 
 const imprimir = () => {
@@ -57,14 +62,13 @@ const imprimir = () => {
 
 <template>
     <AppLayout :breadcrumbs="[
-        { title: 'Programación Académica', href: route('seccion.index') },
-        { title: 'Informes', href: route('informes.secciones') },
-        { title: 'Horario De Docente', href: route('informes.horario_docente') },
+        { title: 'Programación Académica', subtitle: 'Secciones', href: route('seccion.index') },
+        { title: 'Informes', subtitle: 'Programación', href: route('informes.secciones') },
+        { title: 'Horario De Docente', subtitle: 'Cuadrícula', href: route('informes.horario_docente') },
     ]">
-        <Head :title="`Horario Docente: ${props.docenteSeleccionado?.name || 'Consulta'} - SOGAC`" />
+        <Head :title="`Horario Docente: ${obtenerNombreDocente(props.docenteSeleccionado, 'Consulta')} - SOGAC`" />
 
         <div class="space-y-6 p-4 md:p-8 max-w-7xl mx-auto">
-            <!-- CABECERA -->
             <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b pb-4 print:hidden">
                 <div>
                     <div class="flex items-center gap-2">
@@ -87,8 +91,8 @@ const imprimir = () => {
                         @change="cambiarDocente"
                     >
                         <option value="">-- Seleccionar Docente --</option>
-                        <option v-for="doc in props.docentes" :key="doc.id" :value="doc.id">
-                            {{ doc.name }}
+                        <option v-for="doc in props.docentes" :key="obtenerIdDocente(doc)" :value="obtenerIdDocente(doc)">
+                            {{ obtenerNombreDocente(doc) }}{{ doc.cedula_per ? ` (${doc.cedula_per})` : '' }}
                         </option>
                     </select>
 
@@ -99,16 +103,16 @@ const imprimir = () => {
                 </div>
             </div>
 
-            <!-- FICHA DEL DOCENTE -->
             <div v-if="props.docenteSeleccionado" class="p-4 bg-card border rounded-xl shadow-xs">
                 <h2 class="text-lg font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
                     <UserCheck class="h-5 w-5 text-primary" />
-                    Prof. {{ props.docenteSeleccionado.name }}
-                    <span class="text-xs text-muted-foreground font-normal">({{ props.docenteSeleccionado.email }})</span>
+                    Prof. {{ obtenerNombreDocente(props.docenteSeleccionado) }}
+                    <span v-if="props.docenteSeleccionado.cedula_per || obtenerCorreoDocente(props.docenteSeleccionado)" class="text-xs text-muted-foreground font-normal">
+                        ({{ props.docenteSeleccionado.cedula_per ? `C.I. ${props.docenteSeleccionado.cedula_per}` : obtenerCorreoDocente(props.docenteSeleccionado) }})
+                    </span>
                 </h2>
             </div>
 
-            <!-- MATRIZ SEMANAL -->
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
                 <div
                     v-for="dia in dias"
@@ -121,27 +125,27 @@ const imprimir = () => {
 
                     <div class="p-2 space-y-2 flex-1 min-h-[160px]">
                         <div
-                            v-for="h in getHorariosPorDia(dia.id)"
-                            :key="h.id_sho"
+                            v-for="h in getHorariosPorDia(dia.id, dia.nombre)"
+                            :key="h.id_hor ?? h.id_sho"
                             class="p-2.5 rounded-lg border bg-background text-xs space-y-1 border-l-4 border-l-blue-600 shadow-2xs"
                         >
                             <div class="font-bold text-blue-700 dark:text-blue-400 font-mono text-[11px]">
-                                {{ h.hora_inicio }} - {{ h.hora_fin }}
+                                {{ formatearHoraCorta(h.hora_inicio_hor ?? h.hora_inicio) }} - {{ formatearHoraCorta(h.hora_fin_hor ?? h.hora_fin) }}
                             </div>
                             <div class="font-bold text-slate-900 dark:text-slate-100">
-                                {{ h.seccion_unidad_docente?.malla_curricular_detalle?.unidad_curricular?.nombre_ucu || 'Materia' }}
+                                {{ obtenerNombreMateriaHorario(h) }}
                             </div>
                             <div class="text-[11px] text-muted-foreground flex items-center gap-1">
                                 <Layers class="h-3 w-3" />
-                                <span>Sec: {{ h.seccion_unidad_docente?.seccion?.nombre_sec || 'N/A' }}</span>
+                                <span>Sec: {{ obtenerSeccionHorario(h) }}</span>
                             </div>
                             <div class="text-[11px] font-semibold text-primary flex items-center gap-1">
                                 <School class="h-3 w-3" />
-                                <span>{{ h.aula?.nombre_aul || 'Aula' }}</span>
+                                <span>{{ obtenerAulaEtiqueta(h.aula) }}</span>
                             </div>
                         </div>
 
-                        <div v-if="getHorariosPorDia(dia.id).length === 0" class="text-center py-6 text-muted-foreground text-xs italic">
+                        <div v-if="getHorariosPorDia(dia.id, dia.nombre).length === 0" class="text-center py-6 text-muted-foreground text-xs italic">
                             Sin horas asignadas
                         </div>
                     </div>
@@ -150,4 +154,3 @@ const imprimir = () => {
         </div>
     </AppLayout>
 </template>
-

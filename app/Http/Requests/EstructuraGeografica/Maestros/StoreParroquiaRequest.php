@@ -44,7 +44,7 @@ class StoreParroquiaRequest extends FormRequest
             'mun_id' => [
                 'required',
                 'integer',
-                'exists:municipio,id_mun',
+                Rule::exists('municipio', 'id_mun')->whereNull('deleted_at'),
             ],
             'nombre_par' => [
                 'required',
@@ -53,7 +53,8 @@ class StoreParroquiaRequest extends FormRequest
                 'max:255',
                 'regex:/^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s\-\']+$/',
                 Rule::unique('parroquia', 'nombre_par')->where(function ($query) {
-                    return $query->where('mun_id', $this->input('mun_id'));
+                    return $query->where('mun_id', $this->input('mun_id'))
+                        ->whereNull('deleted_at');
                 }),
             ],
         ];

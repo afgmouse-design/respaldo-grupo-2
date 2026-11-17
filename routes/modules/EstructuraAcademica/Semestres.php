@@ -11,6 +11,7 @@ Route::prefix('semestres')->name('semestres.')->group(function () {
     Route::get('/{semestre}/edit', [SemestresController::class, 'edit'])->name('edit');
     Route::put('/{semestre}', [SemestresController::class, 'update'])->name('update');
     Route::get('/{semestre}/show', [SemestresController::class, 'show'])->name('show');
+    Route::patch('/{semestre}/toggle-status', [SemestresController::class, 'toggleStatus'])->name('toggle_status');
     Route::delete('/{semestre}', [SemestresController::class, 'destroy'])->name('destroy');
 });
 
@@ -23,6 +24,6 @@ Route::prefix('academico/tipo-periodo')->name('academico.tipo-periodo.')->group(
     Route::put('/{tipo_periodo}', [SemestresController::class, 'update'])->name('update');
     Route::get('/{tipo_periodo}/show', [SemestresController::class, 'show'])->name('show');
     Route::delete('/{tipo_periodo}', [SemestresController::class, 'destroy'])->name('destroy');
-    Route::patch('/{tipo_periodo}/toggle-status', [SemestresController::class, 'destroy'])->name('toggle_status');
+    Route::patch('/{tipo_periodo}/toggle-status', [SemestresController::class, 'toggleStatus'])->name('toggle_status');
 });
 

@@ -3,61 +3,42 @@
 namespace App\Policies\ProgramacionAcademica\Maestros;
 
 use App\Models\User;
+use App\Policies\Concerns\AuthorizesConPermiso;
 use Illuminate\Auth\Access\HandlesAuthorization;
 
 /**
  * Policy: Autorización del maestro Sección (Programación Académica).
- * Centraliza permisos seccion.ver / crear / editar / eliminar.
+ *
+ * Historial:
+ *  - 2026-11-14: Refactorización para reutilizar `AuthorizesConPermiso`.
  */
 class SeccionPolicy
 {
     use HandlesAuthorization;
+    use AuthorizesConPermiso;
 
     public function viewAny(?User $user): bool
     {
-        return $this->verificarPermiso($user, 'seccion.ver');
+        return $this->permiso($user, 'seccion.ver');
     }
 
     public function view(?User $user, $seccion = null): bool
     {
-        return $this->verificarPermiso($user, 'seccion.ver');
+        return $this->permiso($user, 'seccion.ver');
     }
 
     public function create(?User $user): bool
     {
-        return $this->verificarPermiso($user, 'seccion.crear');
+        return $this->permiso($user, 'seccion.crear');
     }
 
     public function update(?User $user, $seccion = null): bool
     {
-        return $this->verificarPermiso($user, 'seccion.editar');
+        return $this->permiso($user, 'seccion.editar');
     }
 
     public function delete(?User $user, $seccion = null): bool
     {
-        return $this->verificarPermiso($user, 'seccion.eliminar');
-    }
-
-    protected function verificarPermiso(?User $user, string ...$permisos): bool
-    {
-        if (!$user) {
-            return false;
-        }
-
-        if (method_exists($user, 'isSuperAdmin') && $user->isSuperAdmin()) {
-            return true;
-        }
-
-        if (method_exists($user, 'hasPermissionTo')) {
-            foreach ($permisos as $permiso) {
-                if ($user->hasPermissionTo($permiso)) {
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        return true;
+        return $this->permiso($user, 'seccion.eliminar');
     }
 }
-

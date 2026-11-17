@@ -49,7 +49,7 @@ class UpdateMunicipioRequest extends FormRequest
             'esd_id' => [
                 'required',
                 'integer',
-                'exists:estado,id_esd',
+                Rule::exists('estado', 'id_esd')->whereNull('deleted_at'),
             ],
             'nombre_mun' => [
                 'required',
@@ -59,13 +59,15 @@ class UpdateMunicipioRequest extends FormRequest
                 'regex:/^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s\-\']+$/',
                 Rule::unique('municipio', 'nombre_mun')
                     ->where(function ($query) {
-                        return $query->where('esd_id', $this->input('esd_id'));
+                        return $query->where('esd_id', $this->input('esd_id'))
+                            ->whereNull('deleted_at');
                     })
                     ->ignore($municipioId, 'id_mun'),
             ],
-            'status' => [
+            'status_id' => [
                 'sometimes',
-                'boolean',
+                'integer',
+                'exists:status,id_sta',
             ],
         ];
     }
@@ -87,7 +89,8 @@ class UpdateMunicipioRequest extends FormRequest
             'nombre_mun.max'      => 'El nombre del municipio no puede exceder los 255 caracteres.',
             'nombre_mun.regex'    => 'El nombre del municipio solo debe contener letras, espacios, guiones o apóstrofes (sin números).',
             'nombre_mun.unique'   => 'Ya existe otro municipio registrado con este nombre en el estado seleccionado.',
-            'status.boolean'      => 'El estado debe ser verdadero o falso.',
+            'status_id.integer'   => 'El estatus seleccionado debe ser un identificador entero válido.',
+            'status_id.exists'    => 'El estatus seleccionado no existe en el catálogo del sistema.',
         ];
     }
 }

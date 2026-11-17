@@ -31,6 +31,12 @@ interface MallaItem {
     nombre_mac: string;
     codigo_gaceta_mac?: string;
     fecha_aprobacion_mac?: string;
+    programa?: {
+        id_prg: number;
+        nombre_prg: string;
+        codigo_prg?: string;
+        codigo_ministerio_prg?: string;
+    };
     pnf?: {
         id_pnf: number;
         nombre_pnf: string;
@@ -142,7 +148,7 @@ const imprimir = () => {
                         @change="cambiarMalla"
                     >
                         <option v-for="m in props.mallas" :key="m.id_mac" :value="m.id_mac">
-                            {{ m.nombre_mac }} ({{ m.pnf?.nombre_pnf ?? 'Sin PNF' }})
+                            {{ m.nombre_mac }} ({{ m.programa?.nombre_prg ?? m.pnf?.nombre_pnf ?? 'Sin Programa' }})
                         </option>
                     </select>
                 </div>
@@ -165,12 +171,12 @@ const imprimir = () => {
                     <div>
                         <span class="text-xs font-semibold uppercase tracking-wider text-primary">Programa Nacional de Formación</span>
                         <h2 class="text-xl font-bold text-slate-900 dark:text-slate-100 uppercase">
-                            {{ props.mallaSeleccionada.pnf?.nombre_pnf || props.mallaSeleccionada.nombre_mac }}
+                            {{ props.mallaSeleccionada.programa?.nombre_prg || props.mallaSeleccionada.pnf?.nombre_pnf || props.mallaSeleccionada.nombre_mac }}
                         </h2>
                     </div>
                     <div class="flex items-center gap-2">
                         <Badge variant="outline" class="font-mono text-xs">
-                            Cód. PNF: {{ props.mallaSeleccionada.pnf?.codigo_pnf || 'N/A' }}
+                            Cód. Programa: {{ props.mallaSeleccionada.programa?.codigo_prg || props.mallaSeleccionada.programa?.codigo_ministerio_prg || props.mallaSeleccionada.pnf?.codigo_pnf || 'N/A' }}
                         </Badge>
                         <Badge variant="secondary" class="text-xs">
                             Gaceta: {{ props.mallaSeleccionada.codigo_gaceta_mac || 'Aprobada' }}

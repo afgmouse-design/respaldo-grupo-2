@@ -10,29 +10,26 @@
  *   para evitar bucles de redirección hacia index al ser el formulario de entrada directo.
  * - [Ajuste de Campos]: Eliminación de los campos 'Fecha de Inicio de Actividades' y 'Fecha de Cese'
  *   del formulario de creación por solicitud de simplificación.
+ * - [Alineación sogac_mio]: Uso de `url_pagina_uni`, `cse_id`, `dpi_id` y `esd_id`.
+ * - 2026-11-16: Estandarización del pie de formulario con <CrudFormFooter />.
  */
 import { Head, Link, useForm } from '@inertiajs/vue3';
-import { route } from 'ziggy-js';
-import AppLayout from '@/layouts/AppLayout.vue';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
-import type { BreadcrumbItem } from '@/types/navigation';
-import { formatNombre } from '@/lib/utils';
 import {
-    GraduationCap,
-    ArrowLeft,
-    Save,
     AlertCircle,
+    ArrowLeft,
     Building2,
     FileText,
-    Calendar,
     Phone,
-    Mail,
-    Globe,
-    MapPin,
 } from 'lucide-vue-next';
+import { route } from 'ziggy-js';
+import { Button } from '@/components/ui/button';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
+import CrudFormFooter from '@/components/ui/CrudFormFooter.vue';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import AppLayout from '@/layouts/AppLayout.vue';
+import { formatNombre } from '@/lib/utils';
+import type { BreadcrumbItem } from '@/types/navigation';
 
 interface LocalidadItem {
     id_loc: number;
@@ -53,6 +50,9 @@ interface LocalidadItem {
 
 const props = defineProps<{
     localidades: LocalidadItem[];
+    condiciones?: Array<{ id_cse: number; nombre_cse: string }>;
+    dependencias?: Array<{ id_dpi: number; nombre_dpi: string }>;
+    estados?: Array<{ id_esd: number; nombre_esd: string }>;
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -69,12 +69,15 @@ const form = useForm({
     rif_uni: '',
     telefono_uni: '',
     correo_uni: '',
-    sitio_web_uni: '',
+    url_pagina_uni: '',
     gaceta_uni: '',
     fecha_gaceta_uni: '',
     decreto_uni: '',
     fecha_decreto_uni: '',
     loc_id: '' as string | number,
+    esd_id: '' as string | number,
+    dpi_id: '' as string | number,
+    cse_id: '' as string | number,
 });
 
 const submit = () => {
@@ -239,6 +242,69 @@ const submit = () => {
                                     {{ form.errors.loc_id }}
                                 </span>
                             </div>
+
+                            <!-- ESTADO -->
+                            <div v-if="props.estados?.length" class="space-y-2">
+                                <Label for="esd_id" class="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                                    Estado Geográfico
+                                </Label>
+                                <select
+                                    id="esd_id"
+                                    v-model="form.esd_id"
+                                    class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs focus:outline-none focus:ring-2 focus:ring-ring"
+                                    :class="{ 'border-red-500': form.errors.esd_id }"
+                                >
+                                    <option value="">Seleccione un estado...</option>
+                                    <option v-for="est in props.estados" :key="est.id_esd" :value="est.id_esd">
+                                        {{ est.nombre_esd }}
+                                    </option>
+                                </select>
+                                <span v-if="form.errors.esd_id" class="text-xs text-red-500 block">
+                                    {{ form.errors.esd_id }}
+                                </span>
+                            </div>
+
+                            <!-- DEPENDENCIA INSTITUCIONAL -->
+                            <div v-if="props.dependencias?.length" class="space-y-2">
+                                <Label for="dpi_id" class="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                                    Dependencia Institucional
+                                </Label>
+                                <select
+                                    id="dpi_id"
+                                    v-model="form.dpi_id"
+                                    class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs focus:outline-none focus:ring-2 focus:ring-ring"
+                                    :class="{ 'border-red-500': form.errors.dpi_id }"
+                                >
+                                    <option value="">Seleccione dependencia...</option>
+                                    <option v-for="dpi in props.dependencias" :key="dpi.id_dpi" :value="dpi.id_dpi">
+                                        {{ dpi.nombre_dpi }}
+                                    </option>
+                                </select>
+                                <span v-if="form.errors.dpi_id" class="text-xs text-red-500 block">
+                                    {{ form.errors.dpi_id }}
+                                </span>
+                            </div>
+
+                            <!-- CONDICIÓN DE SEDE -->
+                            <div v-if="props.condiciones?.length" class="space-y-2">
+                                <Label for="cse_id" class="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                                    Condición de Sede
+                                </Label>
+                                <select
+                                    id="cse_id"
+                                    v-model="form.cse_id"
+                                    class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs focus:outline-none focus:ring-2 focus:ring-ring"
+                                    :class="{ 'border-red-500': form.errors.cse_id }"
+                                >
+                                    <option value="">Seleccione condición...</option>
+                                    <option v-for="cse in props.condiciones" :key="cse.id_cse" :value="cse.id_cse">
+                                        {{ cse.nombre_cse }}
+                                    </option>
+                                </select>
+                                <span v-if="form.errors.cse_id" class="text-xs text-red-500 block">
+                                    {{ form.errors.cse_id }}
+                                </span>
+                            </div>
                         </CardContent>
                     </Card>
 
@@ -380,32 +446,27 @@ const submit = () => {
 
                             <!-- SITIO WEB -->
                             <div class="space-y-2">
-                                <Label for="sitio_web_uni" class="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                                <Label for="url_pagina_uni" class="text-sm font-semibold text-slate-700 dark:text-slate-300">
                                     Portal Web Oficial
                                 </Label>
                                 <Input
-                                    id="sitio_web_uni"
-                                    v-model="form.sitio_web_uni"
+                                    id="url_pagina_uni"
+                                    v-model="form.url_pagina_uni"
                                     type="url"
                                     placeholder="Ej. https://www.uptp.edu.ve"
-                                    :class="{ 'border-red-500': form.errors.sitio_web_uni }"
+                                    :class="{ 'border-red-500': form.errors.url_pagina_uni }"
                                 />
-                                <span v-if="form.errors.sitio_web_uni" class="text-xs text-red-500 block">
-                                    {{ form.errors.sitio_web_uni }}
+                                <span v-if="form.errors.url_pagina_uni" class="text-xs text-red-500 block">
+                                    {{ form.errors.url_pagina_uni }}
                                 </span>
                             </div>
                         </CardContent>
 
-                        <CardFooter class="flex items-center justify-end gap-3 border-t pt-4">
-                            <Button as-child variant="outline">
-                                <Link :href="route('dashboard')">
-                                    Cancelar
-                                </Link>
-                            </Button>
-                            <Button type="submit" :disabled="form.processing" class="shadow-sm">
-                                <Save class="h-4 w-4 mr-2" />
-                                {{ form.processing ? 'Guardando...' : 'Guardar' }}
-                            </Button>
+                        <CardFooter class="border-t border-slate-100 bg-muted/20 px-6 py-4 dark:border-slate-800/60">
+                            <CrudFormFooter
+                                :cancel-href="route('dashboard')"
+                                :processing="form.processing"
+                            />
                         </CardFooter>
                     </Card>
                 </div>

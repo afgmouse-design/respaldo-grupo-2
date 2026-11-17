@@ -4,27 +4,32 @@
  *
  * Propósito: Página independiente con formulario precargado para modificar la información
  * de una sede, campus o núcleo institucional existente en el SOGAC. Cumple con la arquitectura Zero-Modal.
+ *
+ * Historial:
+ *  - 2026-11-14: Alineado con `cse_id` (`condicion_sede`) y `status_id` mediante `@/lib/status`.
+ *  - 2026-11-16: Estandarización del pie de formulario con <CrudFormFooter />.
  */
 import { Head, Link, useForm } from '@inertiajs/vue3';
+import {
+    AlertCircle,
+    ArrowLeft,
+    Building,
+    Eye,
+    FileText,
+    GraduationCap,
+    Phone,
+} from 'lucide-vue-next';
 import { route } from 'ziggy-js';
-import AppLayout from '@/layouts/AppLayout.vue';
+import Badge from '@/components/ui/badge/Badge.vue';
 import { Button } from '@/components/ui/button';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
+import CrudFormFooter from '@/components/ui/CrudFormFooter.vue';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import Badge from '@/components/ui/badge/Badge.vue';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
-import type { BreadcrumbItem } from '@/types/navigation';
+import AppLayout from '@/layouts/AppLayout.vue';
+import { esActivo, resolverStatusId } from '@/lib/status';
 import { formatNombre } from '@/lib/utils';
-import {
-    Building,
-    ArrowLeft,
-    Save,
-    AlertCircle,
-    GraduationCap,
-    FileText,
-    Phone,
-    Eye,
-} from 'lucide-vue-next';
+import type { BreadcrumbItem } from '@/types/navigation';
 
 interface UniversidadItem {
     id_uni: number;
@@ -50,8 +55,8 @@ interface LocalidadItem {
 }
 
 interface CondicionItem {
-    id_cdn: number;
-    nombre_cdn: string;
+    id_cse: number;
+    nombre_cse: string;
 }
 
 interface SedeModel {
@@ -61,7 +66,7 @@ interface SedeModel {
     codigo_ministerio_sed?: string | null;
     uni_id: number;
     loc_id: number;
-    cdn_id?: number | null;
+    cse_id?: number | null;
     direccion_sed?: string | null;
     telefono_sed?: string | null;
     correo_sed?: string | null;
@@ -71,7 +76,8 @@ interface SedeModel {
     fecha_resolucion_sed?: string | null;
     fecha_inicio_sed?: string | null;
     fecha_fin_sed?: string | null;
-    status: boolean;
+    status_id?: number;
+    status?: boolean | number;
     created_at?: string;
     updated_at?: string;
 }
@@ -96,7 +102,7 @@ const form = useForm({
     codigo_ministerio_sed: props.sede.codigo_ministerio_sed ?? '',
     uni_id: props.sede.uni_id,
     loc_id: props.sede.loc_id,
-    cdn_id: props.sede.cdn_id ?? '',
+    cse_id: props.sede.cse_id ?? '',
     direccion_sed: props.sede.direccion_sed ?? '',
     telefono_sed: props.sede.telefono_sed ?? '',
     correo_sed: props.sede.correo_sed ?? '',
@@ -106,7 +112,7 @@ const form = useForm({
     fecha_resolucion_sed: props.sede.fecha_resolucion_sed ?? '',
     fecha_inicio_sed: props.sede.fecha_inicio_sed ?? '',
     fecha_fin_sed: props.sede.fecha_fin_sed ?? '',
-    status: props.sede.status,
+    status_id: resolverStatusId(props.sede),
 });
 
 const submit = () => {
@@ -134,15 +140,15 @@ const submit = () => {
                             Editar Sede / Núcleo
                         </h1>
                         <Badge
-                            :variant="props.sede.status ? 'default' : 'outline'"
+                            :variant="esActivo(props.sede) ? 'default' : 'outline'"
                             :class="[
                                 'ml-2',
-                                props.sede.status
+                                esActivo(props.sede)
                                     ? 'bg-emerald-600 text-white'
                                     : 'border-rose-300 text-rose-600 bg-rose-50 dark:bg-rose-950/20'
                             ]"
                         >
-                            {{ props.sede.status ? 'Activo' : 'Inactivo' }}
+                            {{ esActivo(props.sede) ? 'Activo' : 'Inactivo' }}
                         </Badge>
                     </div>
                     <p class="text-sm text-muted-foreground ml-10">
@@ -220,26 +226,26 @@ const submit = () => {
 
                             <!-- CONDICIÓN INSTITUCIONAL -->
                             <div class="space-y-2">
-                                <Label for="cdn_id" class="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                                <Label for="cse_id" class="text-sm font-semibold text-slate-700 dark:text-slate-300">
                                     Condición / Ámbito
                                 </Label>
                                 <select
-                                    id="cdn_id"
-                                    v-model="form.cdn_id"
+                                    id="cse_id"
+                                    v-model="form.cse_id"
                                     class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs focus:outline-none focus:ring-2 focus:ring-ring"
-                                    :class="{ 'border-red-500': form.errors.cdn_id }"
+                                    :class="{ 'border-red-500': form.errors.cse_id }"
                                 >
                                     <option value="">Sin especificar...</option>
                                     <option
-                                        v-for="cdn in props.condiciones"
-                                        :key="cdn.id_cdn"
-                                        :value="cdn.id_cdn"
+                                        v-for="cse in props.condiciones"
+                                        :key="cse.id_cse"
+                                        :value="cse.id_cse"
                                     >
-                                        {{ cdn.nombre_cdn }}
+                                        {{ cse.nombre_cse }}
                                     </option>
                                 </select>
-                                <span v-if="form.errors.cdn_id" class="text-xs text-red-500 block">
-                                    {{ form.errors.cdn_id }}
+                                <span v-if="form.errors.cse_id" class="text-xs text-red-500 block">
+                                    {{ form.errors.cse_id }}
                                 </span>
                             </div>
                         </CardContent>
@@ -507,16 +513,12 @@ const submit = () => {
                             </div>
                         </CardContent>
 
-                        <CardFooter class="flex items-center justify-end gap-3 border-t pt-4">
-                            <Button as-child variant="outline">
-                                <Link :href="route('organizacion.sede.index')">
-                                    Cancelar
-                                </Link>
-                            </Button>
-                            <Button type="submit" :disabled="form.processing" class="shadow-sm">
-                                <Save class="h-4 w-4 mr-2" />
-                                {{ form.processing ? 'Actualizando...' : 'Actualizar' }}
-                            </Button>
+                        <CardFooter class="border-t border-slate-100 bg-muted/20 px-6 py-4 dark:border-slate-800/60">
+                            <CrudFormFooter
+                                :cancel-href="route('organizacion.sede.index')"
+                                :is-edit="true"
+                                :processing="form.processing"
+                            />
                         </CardFooter>
                     </Card>
                 </div>

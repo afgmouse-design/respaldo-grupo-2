@@ -18,6 +18,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import type { BreadcrumbItem } from '@/types/navigation';
+import { esActivo } from '@/lib/status';
+import { obtenerNombreDocenteCarga } from '@/lib/academico';
 import {
     FileCheck,
     Printer,
@@ -54,13 +56,33 @@ interface SeccionItem {
     codigo_sec?: string | null;
     nombre_sec: string;
     cupo_maximo_sec?: number | null;
-    status: boolean;
+    status_id?: number;
+    status?: boolean;
+    programa?: {
+        nombre_prg: string;
+    };
     malla_curricular?: {
         nombre_mac: string;
+        programa?: {
+            nombre_prg: string;
+        };
         pnf?: {
             nombre_pnf: string;
         };
     };
+    cargas_academicas?: Array<{
+        id_caa: number;
+        unidad_curricular?: {
+            nombre_unc: string;
+            codigo_unc: string;
+        };
+        docente_perfil?: {
+            persona?: {
+                nombres_per?: string;
+                apellidos_per?: string;
+            };
+        };
+    }>;
     unidades_docentes?: Array<{
         id_sud: number;
         docente?: { name: string };
@@ -736,23 +758,23 @@ const imprimir = () => {
                                         {{ sec.malla_curricular?.nombre_mac || 'Sin Malla Asignada' }}
                                     </div>
                                     <div class="text-[11px] text-muted-foreground">
-                                        {{ sec.malla_curricular?.pnf?.nombre_pnf || 'PNF General' }}
+                                        {{ sec.programa?.nombre_prg || sec.malla_curricular?.programa?.nombre_prg || sec.malla_curricular?.pnf?.nombre_pnf || 'Programa General' }}
                                     </div>
                                 </td>
                                 <td class="p-4">
                                     <div class="flex flex-wrap gap-1">
                                         <Badge
-                                            v-for="ud in sec.unidades_docentes"
-                                            :key="ud.id_sud"
+                                            v-for="carga in (sec.cargas_academicas ?? sec.unidades_docentes ?? [])"
+                                            :key="('id_caa' in carga ? carga.id_caa : carga.id_sud)"
                                             variant="outline"
                                             class="text-[11px] bg-background"
                                         >
-                                            {{ ud.malla_curricular_detalle?.unidad_curricular?.nombre_unc || 'Materia' }}
-                                            <span v-if="ud.docente" class="text-muted-foreground ml-1">
-                                                ({{ ud.docente.name }})
+                                            {{ ('unidad_curricular' in carga ? carga.unidad_curricular?.nombre_unc : carga.malla_curricular_detalle?.unidad_curricular?.nombre_unc) || 'Materia' }}
+                                            <span v-if="obtenerNombreDocenteCarga(carga, '')" class="text-muted-foreground ml-1">
+                                                ({{ obtenerNombreDocenteCarga(carga) }})
                                             </span>
                                         </Badge>
-                                        <span v-if="!sec.unidades_docentes || sec.unidades_docentes.length === 0" class="text-xs text-muted-foreground italic">
+                                        <span v-if="!(sec.cargas_academicas ?? sec.unidades_docentes)?.length" class="text-xs text-muted-foreground italic">
                                             Sin materias asignadas
                                         </span>
                                     </div>
@@ -761,8 +783,8 @@ const imprimir = () => {
                                     {{ sec.cupo_maximo_sec || 30 }}
                                 </td>
                                 <td class="p-4 text-center">
-                                    <Badge :variant="sec.status ? 'default' : 'secondary'">
-                                        {{ sec.status ? 'Abierta' : 'Cerrada' }}
+                                    <Badge :variant="esActivo(sec) ? 'default' : 'secondary'">
+                                        {{ esActivo(sec) ? 'Abierta' : 'Cerrada' }}
                                     </Badge>
                                 </td>
                             </tr>

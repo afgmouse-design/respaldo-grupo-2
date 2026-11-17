@@ -138,12 +138,16 @@ class PaisController extends Controller
     }
 
     /**
-     * Realiza la baja lógica del país y propaga la desactivación en cascada a toda su estructura territorial.
+     * Ejecuta la eliminación lógica en interfaz (`deleted_at` + `status_id = 2`)
+     * propagando la baja en cascada a la jerarquía territorial sin borrar registros de BD.
+     *
+     * Historial:
+     * - 2026-11-16: Reemplazada la mera inactivación (`desactivarConCascada`) por `eliminarConCascada`.
      */
     public function destroy(int $id_pai): RedirectResponse
     {
         try {
-            $resultado = Pais::desactivarConCascada($id_pai, auth()->id());
+            $resultado = Pais::eliminarConCascada($id_pai, auth()->id());
 
             return redirect()
                 ->back()

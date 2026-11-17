@@ -2,14 +2,17 @@
 /**
  * Vista Standalone: Detalle de Horario de Clase (Programación Académica).
  * Grupo 3: Ángel Gonzales - Oferta y Horarios.
+ *
+ * Historial:
+ * - 2026-11-16: Unificación de ícono <Pencil /> (en reemplazo de <Edit />) y ordenado de importaciones.
  */
 import { Head, Link } from '@inertiajs/vue3';
+import { ArrowLeft, BookOpen, CalendarClock, Clock, Pencil, School } from 'lucide-vue-next';
 import { route } from 'ziggy-js';
-import AppLayout from '@/layouts/AppLayout.vue';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
+import AppLayout from '@/layouts/AppLayout.vue';
 import type { BreadcrumbItem } from '@/types/navigation';
-import { ArrowLeft, CalendarClock, Clock, School, BookOpen, Layers, Edit } from 'lucide-vue-next';
 
 const props = defineProps<{
     horario: any;
@@ -52,7 +55,7 @@ const formatTime = (timeStr?: string) => {
 
                 <Button as-child size="sm" class="gap-2">
                     <Link :href="route('horario.edit', horario.id_hor)">
-                        <Edit class="h-4 w-4" />
+                        <Pencil class="h-4 w-4" />
                         <span>Editar</span>
                     </Link>
                 </Button>

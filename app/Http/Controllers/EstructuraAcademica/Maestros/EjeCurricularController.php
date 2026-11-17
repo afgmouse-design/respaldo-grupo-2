@@ -34,7 +34,7 @@ class EjeCurricularController extends Controller
         $perPage = (int) ($request->input('per_page') ?? $request->input('registros_per_page') ?? 10);
 
         $ejes = EjeCurricular::obtenerPaginados(
-            $request->only(['search']),
+            $request->only(['search', 'status', 'status_id']),
             $perPage
         );
 
@@ -42,7 +42,7 @@ class EjeCurricularController extends Controller
             'ejes'    => $ejes,
             'perPage' => $perPage,
             'filters' => array_merge(
-                $request->only(['search', 'per_page', 'registros_per_page']),
+                $request->only(['search', 'status', 'status_id', 'per_page', 'registros_per_page']),
                 ['per_page' => $perPage, 'registros_per_page' => $perPage]
             ),
         ]);
@@ -72,8 +72,7 @@ class EjeCurricularController extends Controller
                 'nombre_ecu'      => trim($validated['nombre_ecu']),
                 'codigo_ecu'      => isset($validated['codigo_ecu']) ? trim($validated['codigo_ecu']) : null,
                 'descripcion_ecu' => isset($validated['descripcion_ecu']) ? trim($validated['descripcion_ecu']) : null,
-                'status'          => true,
-                'status_id'       => 1,
+                'status_id'       => EjeCurricular::STATUS_ACTIVO,
                 'created_id'      => auth()->id(),
                 'created_at'      => now(),
                 'updated_at'      => now(),
@@ -95,7 +94,7 @@ class EjeCurricularController extends Controller
      */
     public function show(int $id): Response
     {
-        $eje = DB::table('eje_curricular')->where('id_ecu', $id)->first();
+        $eje = DB::table('eje_curricular')->where('id_ecu', $id)->whereNull('deleted_at')->first();
 
         if (!$eje) {
             abort(404, 'Eje curricular no encontrado.');
@@ -108,10 +107,11 @@ class EjeCurricularController extends Controller
 
     /**
      * Muestra el formulario para editar un eje curricular.
+     * Historial: Se agrega filtro whereNull('deleted_at') para respetar el SoftDelete de PostgreSQL.
      */
     public function edit(int $id): Response
     {
-        $eje = DB::table('eje_curricular')->where('id_ecu', $id)->first();
+        $eje = DB::table('eje_curricular')->where('id_ecu', $id)->whereNull('deleted_at')->first();
 
         if (!$eje) {
             abort(404, 'Eje curricular no encontrado.');
@@ -156,23 +156,52 @@ class EjeCurricularController extends Controller
     }
 
     /**
-     * Realiza la baja lógica del eje curricular llamando a alternarEstatus($id, 2).
+     * Alterna el estatus lógico (`status_id` 1 <-> 2) del eje curricular sin eliminarlo.
+     */
+    public function toggleStatus(int $id): RedirectResponse
+    {
+        try {
+            $eje = EjeCurricular::where('id_ecu', $id)->firstOrFail();
+            $nuevoEstado = EjeCurricular::esStatusActivo($eje)
+                ? EjeCurricular::STATUS_INACTIVO
+                : EjeCurricular::STATUS_ACTIVO;
+
+            EjeCurricular::alternarEstatus($id, $nuevoEstado);
+
+            $estadoTexto = $nuevoEstado === EjeCurricular::STATUS_ACTIVO ? 'activado' : 'inactivado';
+
+            return redirect()
+                ->back()
+                ->with('success', "El eje curricular '{$eje->nombre_ecu}' ha sido {$estadoTexto} exitosamente.");
+        } catch (\Throwable $e) {
+            return redirect()
+                ->back()
+                ->withErrors(['error' => 'No se pudo cambiar el estatus del eje curricular: ' . $e->getMessage()]);
+        }
+    }
+
+    /**
+     * Ejecuta la eliminación lógica en interfaz (`deleted_at` + `status_id = 2`)
+     * preservando el registro histórico en PostgreSQL.
+     *
+     * Historial:
+     * - 2026-11-16: Reemplazada la mera inactivación (`alternarEstatus`) por `ejecutarBajaLogicaModelo`.
      */
     public function destroy(int $id): RedirectResponse
     {
         try {
-            $eje = DB::table('eje_curricular')->where('id_ecu', $id)->first();
-            $nombre = $eje ? $eje->nombre_ecu : 'Eje curricular';
+            $eje = EjeCurricular::where('id_ecu', $id)->firstOrFail();
+            $nombre = $eje->nombre_ecu;
 
-            EjeCurricular::alternarEstatus($id, 2);
+            EjeCurricular::ejecutarBajaLogicaModelo($eje, auth()->id(), EjeCurricular::STATUS_INACTIVO);
 
             return redirect()
                 ->back()
-                ->with('success', "El eje curricular '{$nombre}' ha sido dado de baja (inactivado) exitosamente.");
+                ->with('success', "El eje curricular '{$nombre}' ha sido eliminado exitosamente.");
         } catch (\Throwable $e) {
             return redirect()
                 ->back()
-                ->withErrors(['error' => 'No se pudo dar de baja el eje curricular: ' . $e->getMessage()]);
+                ->withErrors(['error' => 'No se pudo eliminar el eje curricular: ' . $e->getMessage()]);
         }
     }
 }

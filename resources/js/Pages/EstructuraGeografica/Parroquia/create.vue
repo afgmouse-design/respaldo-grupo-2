@@ -5,25 +5,22 @@
  * Propósito: Página independiente con formulario para registrar una nueva parroquia,
  * con selectores encadenados asistidos (Filtro por Estado -> Selector de Municipio padre).
  * Cumple estrictamente la regla de CERO MODALES.
+ *
+ * Historial:
+ * - 2026-11-16: Estandarización del pie de formulario con <CrudFormFooter />.
  */
-import { ref, computed, onMounted } from 'vue';
 import { Head, Link, useForm } from '@inertiajs/vue3';
+import { AlertCircle, ArrowLeft, Building2, Compass, MapPin } from 'lucide-vue-next';
+import { computed, onMounted, ref } from 'vue';
 import { route } from 'ziggy-js';
-import AppLayout from '@/layouts/AppLayout.vue';
 import { Button } from '@/components/ui/button';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
+import CrudFormFooter from '@/components/ui/CrudFormFooter.vue';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
-import type { BreadcrumbItem } from '@/types/navigation';
+import AppLayout from '@/layouts/AppLayout.vue';
 import { formatNombre } from '@/lib/utils';
-import {
-    Compass,
-    ArrowLeft,
-    Save,
-    AlertCircle,
-    Building2,
-    MapPin,
-} from 'lucide-vue-next';
+import type { BreadcrumbItem } from '@/types/navigation';
 
 interface EstadoRef {
     id_esd: number;
@@ -233,17 +230,11 @@ const submit = () => {
                         </div>
                     </CardContent>
 
-                    <CardFooter class="flex items-center justify-end gap-3 border-t bg-muted/20 px-6 py-4">
-                        <Button as-child variant="outline">
-                            <Link :href="route('geografia.parroquia.index')">
-                                Cancelar
-                            </Link>
-                        </Button>
-
-                        <Button type="submit" :disabled="form.processing" class="shadow-xs">
-                            <Save class="h-4 w-4 mr-2" />
-                            {{ form.processing ? 'Guardando...' : 'Guardar' }}
-                        </Button>
+                    <CardFooter class="border-t border-slate-100 bg-muted/20 px-6 py-4 dark:border-slate-800/60">
+                        <CrudFormFooter
+                            :cancel-href="route('geografia.parroquia.index')"
+                            :processing="form.processing"
+                        />
                     </CardFooter>
                 </form>
             </Card>

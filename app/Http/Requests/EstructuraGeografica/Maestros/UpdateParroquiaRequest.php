@@ -49,7 +49,7 @@ class UpdateParroquiaRequest extends FormRequest
             'mun_id' => [
                 'required',
                 'integer',
-                'exists:municipio,id_mun',
+                Rule::exists('municipio', 'id_mun')->whereNull('deleted_at'),
             ],
             'nombre_par' => [
                 'required',
@@ -59,13 +59,15 @@ class UpdateParroquiaRequest extends FormRequest
                 'regex:/^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s\-\']+$/',
                 Rule::unique('parroquia', 'nombre_par')
                     ->where(function ($query) {
-                        return $query->where('mun_id', $this->input('mun_id'));
+                        return $query->where('mun_id', $this->input('mun_id'))
+                            ->whereNull('deleted_at');
                     })
                     ->ignore($parroquiaId, 'id_par'),
             ],
-            'status' => [
+            'status_id' => [
                 'sometimes',
-                'boolean',
+                'integer',
+                'exists:status,id_sta',
             ],
         ];
     }
@@ -87,7 +89,8 @@ class UpdateParroquiaRequest extends FormRequest
             'nombre_par.max'      => 'El nombre de la parroquia no puede exceder los 255 caracteres.',
             'nombre_par.regex'    => 'El nombre de la parroquia solo debe contener letras, espacios, guiones o apóstrofes (sin números).',
             'nombre_par.unique'   => 'Ya existe otra parroquia registrada con este nombre en el municipio seleccionado.',
-            'status.boolean'      => 'El estado debe ser verdadero o falso.',
+            'status_id.integer'   => 'El estatus seleccionado debe ser un identificador entero válido.',
+            'status_id.exists'    => 'El estatus seleccionado no existe en el catálogo del sistema.',
         ];
     }
 }

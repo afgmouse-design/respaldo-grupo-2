@@ -3,7 +3,10 @@
  * Vista Standalone: Detalle de Cohorte por Sede (Programación Académica).
  *
  * Propósito: Ficha técnica de consulta y detalle de la asignación de cohorte en sede.
+ * Historial:
+ *  - 2026-11-14: Alineado a `sede_programa(id_spr)`, `programa(id_prg)` y `status_id` (`esActivo`).
  */
+import { computed } from 'vue';
 import { Head, Link } from '@inertiajs/vue3';
 import { route } from 'ziggy-js';
 import AppLayout from '@/layouts/AppLayout.vue';
@@ -12,20 +15,32 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 import type { BreadcrumbItem } from '@/types/navigation';
 import { ArrowLeft, Pencil, MapPin, CheckCircle2, XCircle, GraduationCap, Building2 } from 'lucide-vue-next';
+import { esActivo } from '@/lib/status';
+
+interface SedeProgramaDetalle {
+    id_spr?: number;
+    id_sep?: number;
+    sede?: { id_sed: number; nombre_sed: string };
+    programa?: { id_prg: number; nombre_prg: string };
+    pnf?: { id_pnf: number; nombre_pnf: string };
+}
 
 const props = defineProps<{
     cohorteSede: {
         id_cos: number;
         nombre_cos: string;
+        status_id?: number;
         status?: boolean;
         cohorte?: { id_coh: number; nombre_coh: string };
-        sede_pnf?: {
-            id_sep: number;
-            sede?: { id_sed: number; nombre_sed: string };
-            pnf?: { id_pnf: number; nombre_pnf: string };
-        };
+        sede_programa?: SedeProgramaDetalle;
+        sedePrograma?: SedeProgramaDetalle;
+        sede_pnf?: SedeProgramaDetalle;
     };
 }>();
+
+const ofertaSedePrograma = computed(
+    () => props.cohorteSede.sede_programa ?? props.cohorteSede.sedePrograma ?? props.cohorteSede.sede_pnf
+);
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Dashboard', subtitle: 'Panel Principal', href: route('dashboard') },
@@ -74,10 +89,10 @@ const breadcrumbs: BreadcrumbItem[] = [
                             <MapPin class="h-5 w-5 text-primary" />
                             <CardTitle class="text-lg font-semibold">{{ cohorteSede.nombre_cos }}</CardTitle>
                         </div>
-                        <Badge :variant="cohorteSede.status ? 'default' : 'secondary'" class="gap-1.5 py-1 px-3">
-                            <CheckCircle2 v-if="cohorteSede.status" class="h-3.5 w-3.5" />
+                        <Badge :variant="esActivo(cohorteSede) ? 'default' : 'secondary'" class="gap-1.5 py-1 px-3">
+                            <CheckCircle2 v-if="esActivo(cohorteSede)" class="h-3.5 w-3.5" />
                             <XCircle v-else class="h-3.5 w-3.5" />
-                            {{ cohorteSede.status ? 'Activa' : 'Inactiva' }}
+                            {{ esActivo(cohorteSede) ? 'Activa' : 'Inactiva' }}
                         </Badge>
                     </div>
                     <CardDescription>Código de asignación: #{{ cohorteSede.id_cos }}</CardDescription>
@@ -97,14 +112,14 @@ const breadcrumbs: BreadcrumbItem[] = [
                             <span class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Sede Universitaria</span>
                             <p class="text-base font-semibold text-slate-900 dark:text-slate-100 mt-1 flex items-center gap-1.5">
                                 <Building2 class="h-4 w-4 text-primary" />
-                                {{ cohorteSede.sede_pnf?.sede?.nombre_sed || 'No asignada' }}
+                                {{ ofertaSedePrograma?.sede?.nombre_sed || 'No asignada' }}
                             </p>
                         </div>
 
                         <div class="md:col-span-2">
-                            <span class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Programa Nacional de Formación (PNF)</span>
+                            <span class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Programa Académico</span>
                             <p class="text-base font-medium text-slate-900 dark:text-slate-100 mt-1">
-                                {{ cohorteSede.sede_pnf?.pnf?.nombre_pnf || 'No asignado' }}
+                                {{ ofertaSedePrograma?.programa?.nombre_prg || ofertaSedePrograma?.pnf?.nombre_pnf || 'No asignado' }}
                             </p>
                         </div>
                     </div>

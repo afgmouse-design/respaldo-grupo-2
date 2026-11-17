@@ -8,8 +8,9 @@ import { Head, Link } from '@inertiajs/vue3';
 import { route } from 'ziggy-js';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { Button } from '@/components/ui/button';
-import Badge from '@/components/ui/badge/Badge.vue';
+import { Badge } from '@/components/ui/badge';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
+import { esActivo } from '@/lib/status';
 import type { BreadcrumbItem } from '@/types/navigation';
 import {
     Calculator,
@@ -28,12 +29,13 @@ interface EscalaDetalle {
     nota_aprobatoria_esm: number;
     nota_minima_esm: number | null;
     nota_maxima_esm: number | null;
-    status: boolean;
+    status_id?: number;
+    status?: boolean;
     est_esm?: boolean;
     created_at?: string;
     updated_at?: string;
-    creador?: { id: number; name: string; email: string } | null;
-    actualizador?: { id: number; name: string; email: string } | null;
+    creador?: { id: number; username?: string; name?: string; email: string } | null;
+    actualizador?: { id: number; username?: string; name?: string; email: string } | null;
 }
 
 const props = defineProps<{
@@ -65,8 +67,8 @@ const breadcrumbs: BreadcrumbItem[] = [
                         <h1 class="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
                             {{ escala.nombre_esm }}
                         </h1>
-                        <Badge :variant="escala.status ? 'default' : 'secondary'" class="ml-2">
-                            {{ escala.status ? 'Activo' : 'Inactivo' }}
+                        <Badge :variant="esActivo(escala) ? 'default' : 'secondary'" class="ml-2">
+                            {{ esActivo(escala) ? 'Activo' : 'Inactivo' }}
                         </Badge>
                     </div>
                     <p class="text-sm text-muted-foreground ml-10">
@@ -139,7 +141,7 @@ const breadcrumbs: BreadcrumbItem[] = [
                         <div>
                             <p class="text-xs text-muted-foreground">Registrado por</p>
                             <p class="font-medium text-foreground">
-                                {{ escala.creador ? escala.creador.name : 'Sistema / Inicial' }}
+                                {{ escala.creador ? (escala.creador.username ?? escala.creador.name) : 'Sistema / Inicial' }}
                             </p>
                         </div>
                     </div>
@@ -159,7 +161,11 @@ const breadcrumbs: BreadcrumbItem[] = [
                         <div>
                             <p class="text-xs text-muted-foreground">Última modificación por</p>
                             <p class="font-medium text-foreground">
-                                {{ escala.actualizador ? escala.actualizador.name : (escala.creador ? escala.creador.name : 'Sin cambios') }}
+                                {{
+                                    escala.actualizador
+                                        ? (escala.actualizador.username ?? escala.actualizador.name)
+                                        : (escala.creador ? (escala.creador.username ?? escala.creador.name) : 'Sin cambios')
+                                }}
                             </p>
                         </div>
                     </div>

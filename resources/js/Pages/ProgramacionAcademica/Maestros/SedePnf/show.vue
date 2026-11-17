@@ -4,6 +4,7 @@
  *
  * Propósito: Ficha técnica de consulta y detalle de la oferta académica por sede.
  */
+import { computed } from 'vue';
 import { Head, Link } from '@inertiajs/vue3';
 import { route } from 'ziggy-js';
 import AppLayout from '@/layouts/AppLayout.vue';
@@ -12,21 +13,33 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 import type { BreadcrumbItem } from '@/types/navigation';
 import { ArrowLeft, Pencil, Building2, CheckCircle2, XCircle, BookOpen } from 'lucide-vue-next';
+import { esActivo } from '@/lib/status';
+
+interface SedeProgramaDetalle {
+    id_spr?: number;
+    id_sep?: number;
+    codigo_ministerio_spr?: string | null;
+    cantidad_asignados_spr?: number | null;
+    status_id?: number;
+    status?: boolean;
+    sede?: { id_sed: number; nombre_sed: string; codigo_sed?: string };
+    programa?: { id_prg: number; nombre_prg: string; codigo_prg?: string };
+    pnf?: { id_pnf: number; nombre_pnf: string; codigo_pnf?: string };
+}
 
 const props = defineProps<{
-    sedePnf: {
-        id_sep: number;
-        status?: boolean;
-        sede?: { id_sed: number; nombre_sed: string; codigo_sed?: string };
-        pnf?: { id_pnf: number; nombre_pnf: string; codigo_pnf?: string };
-    };
+    sedePrograma?: SedeProgramaDetalle;
+    sedePnf?: SedeProgramaDetalle;
 }>();
+
+const ofertaActual = computed(() => props.sedePrograma ?? props.sedePnf);
+const ofertaId = computed(() => ofertaActual.value?.id_spr ?? ofertaActual.value?.id_sep ?? 0);
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Dashboard', subtitle: 'Panel Principal', href: route('dashboard') },
     { title: 'Programación Académica', subtitle: 'Maestros', href: '#' },
-    { title: 'Oferta Sede PNF', subtitle: 'Listado', href: route('sede_pnf.index') },
-    { title: 'Detalle de Oferta', subtitle: 'Consulta', href: route('sede_pnf.show', props.sedePnf.id_sep) },
+    { title: 'Oferta Sede - Programa', subtitle: 'Listado', href: route('sede_pnf.index') },
+    { title: 'Detalle de Oferta', subtitle: 'Consulta', href: route('sede_pnf.show', ofertaId.value) },
 ];
 </script>
 
@@ -54,7 +67,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 
                 <div class="flex items-center gap-2">
                     <Button as-child variant="outline" class="gap-2">
-                        <Link :href="route('sede_pnf.edit', sedePnf.id_sep)">
+                        <Link :href="route('sede_pnf.edit', ofertaId)">
                             <Pencil class="h-4 w-4" />
                             <span>Editar</span>
                         </Link>
@@ -67,15 +80,15 @@ const breadcrumbs: BreadcrumbItem[] = [
                     <div class="flex items-center justify-between">
                         <div class="flex items-center gap-2">
                             <Building2 class="h-5 w-5 text-primary" />
-                            <CardTitle class="text-lg font-semibold">Oferta #{{ sedePnf.id_sep }}</CardTitle>
+                            <CardTitle class="text-lg font-semibold">Oferta #{{ ofertaId }}</CardTitle>
                         </div>
-                        <Badge :variant="sedePnf.status ? 'default' : 'secondary'" class="gap-1.5 py-1 px-3">
-                            <CheckCircle2 v-if="sedePnf.status" class="h-3.5 w-3.5" />
+                        <Badge :variant="esActivo(ofertaActual) ? 'default' : 'secondary'" class="gap-1.5 py-1 px-3">
+                            <CheckCircle2 v-if="esActivo(ofertaActual)" class="h-3.5 w-3.5" />
                             <XCircle v-else class="h-3.5 w-3.5" />
-                            {{ sedePnf.status ? 'Habilitada' : 'Inactiva' }}
+                            {{ esActivo(ofertaActual) ? 'Habilitada' : 'Inactiva' }}
                         </Badge>
                     </div>
-                    <CardDescription>Vinculación de carrera por sede universitaria</CardDescription>
+                    <CardDescription>Vinculación de programa por sede universitaria</CardDescription>
                 </CardHeader>
 
                 <CardContent class="space-y-6">
@@ -84,15 +97,29 @@ const breadcrumbs: BreadcrumbItem[] = [
                             <span class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Sede Universitaria</span>
                             <p class="text-base font-semibold text-slate-900 dark:text-slate-100 mt-1 flex items-center gap-1.5">
                                 <Building2 class="h-4 w-4 text-primary" />
-                                {{ sedePnf.sede?.nombre_sed || 'No asignada' }}
+                                {{ ofertaActual?.sede?.nombre_sed || 'No asignada' }}
                             </p>
                         </div>
 
                         <div>
-                            <span class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Programa Nacional de Formación</span>
+                            <span class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Programa Académico</span>
                             <p class="text-base font-semibold text-slate-900 dark:text-slate-100 mt-1 flex items-center gap-1.5">
                                 <BookOpen class="h-4 w-4 text-primary" />
-                                {{ sedePnf.pnf?.nombre_pnf || 'No asignado' }}
+                                {{ ofertaActual?.programa?.nombre_prg || ofertaActual?.pnf?.nombre_pnf || 'No asignado' }}
+                            </p>
+                        </div>
+
+                        <div v-if="ofertaActual?.codigo_ministerio_spr">
+                            <span class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Código Ministerio</span>
+                            <p class="text-base font-mono font-semibold text-slate-900 dark:text-slate-100 mt-1">
+                                {{ ofertaActual.codigo_ministerio_spr }}
+                            </p>
+                        </div>
+
+                        <div v-if="ofertaActual?.cantidad_asignados_spr !== null && ofertaActual?.cantidad_asignados_spr !== undefined">
+                            <span class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Asignados OPSU</span>
+                            <p class="text-base font-semibold text-slate-900 dark:text-slate-100 mt-1">
+                                {{ ofertaActual.cantidad_asignados_spr }}
                             </p>
                         </div>
                     </div>

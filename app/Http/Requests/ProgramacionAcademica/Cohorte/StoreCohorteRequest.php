@@ -1,18 +1,16 @@
 <?php
 
+/**
+ * Propósito: Valida la creación de una Cohorte verificando los límites temporales de su Lapso Académico padre.
+ * Historial: Actualizado para consultar `lapso_academico.id_laa`, `fecha_inicio_laa`, `fecha_fin_laa` y `status_id`.
+ */
+
 namespace App\Http\Requests\ProgramacionAcademica\Cohorte;
 
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
-/**
- * Form Request: validación de servidor para crear una Cohorte.
- *
- * Actualización 2026-10-21 (Validación de Límites Temporales con el Lapso Padre):
- * Se incorporó en `withValidator()` la verificación de que `fecha_inicio_coh`
- * no sea anterior a `fecha_inicio_la` ni posterior a `fecha_fin_la` del lapso académico seleccionado.
- */
 class StoreCohorteRequest extends FormRequest
 {
     public function authorize(): bool
@@ -23,15 +21,18 @@ class StoreCohorteRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'nombre_coh'       => [
-                'required', 'string', 'min:2', 'max:255',
+            'nombre_coh' => [
+                'required',
+                'string',
+                'min:2',
+                'max:255',
                 Rule::unique('cohorte', 'nombre_coh')
                     ->where(fn ($q) => $q->where('laa_id', $this->input('laa_id'))->whereNull('deleted_at')),
             ],
             'fecha_inicio_coh' => ['required', 'date'],
-            'laa_id'           => ['required', 'integer', Rule::exists('lapso_academico', 'id_la')],
+            'laa_id'           => ['required', 'integer', Rule::exists('lapso_academico', 'id_laa')->whereNull('deleted_at')],
             'status'           => ['nullable'],
-            'status_id'        => ['nullable', 'integer'],
+            'status_id'        => ['nullable', 'integer', 'exists:status,id_sta'],
         ];
     }
 
@@ -48,7 +49,7 @@ class StoreCohorteRequest extends FormRequest
     }
 
     /**
-     * Valida que la fecha de la cohorte se encuentre dentro de los límites del lapso académico padre.
+     * Valida que `fecha_inicio_coh` esté dentro del intervalo del lapso académico padre.
      */
     public function withValidator($validator): void
     {
@@ -57,20 +58,20 @@ class StoreCohorteRequest extends FormRequest
             $inicio = $this->input('fecha_inicio_coh');
 
             if ($laaId && $inicio) {
-                $lapso = DB::table('lapso_academico')->where('id_la', $laaId)->first();
+                $lapso = DB::table('lapso_academico')->where('id_laa', $laaId)->whereNull('deleted_at')->first();
 
                 if ($lapso) {
-                    if (!empty($lapso->fecha_inicio_la) && $inicio < $lapso->fecha_inicio_la) {
+                    if (!empty($lapso->fecha_inicio_laa) && $inicio < $lapso->fecha_inicio_laa) {
                         $v->errors()->add(
                             'fecha_inicio_coh',
-                            "La fecha de inicio de la cohorte ({$inicio}) no puede ser anterior a la fecha de inicio del lapso académico padre ({$lapso->fecha_inicio_la})."
+                            "La fecha de inicio de la cohorte ({$inicio}) no puede ser anterior a la fecha de inicio del lapso académico padre ({$lapso->fecha_inicio_laa})."
                         );
                     }
 
-                    if (!empty($lapso->fecha_fin_la) && $inicio > $lapso->fecha_fin_la) {
+                    if (!empty($lapso->fecha_fin_laa) && $inicio > $lapso->fecha_fin_laa) {
                         $v->errors()->add(
                             'fecha_inicio_coh',
-                            "La fecha de inicio de la cohorte ({$inicio}) no puede ser posterior a la fecha de culminación del lapso académico padre ({$lapso->fecha_fin_la})."
+                            "La fecha de inicio de la cohorte ({$inicio}) no puede ser posterior a la fecha de culminación del lapso académico padre ({$lapso->fecha_fin_laa})."
                         );
                     }
                 }
@@ -78,4 +79,3 @@ class StoreCohorteRequest extends FormRequest
         });
     }
 }
-

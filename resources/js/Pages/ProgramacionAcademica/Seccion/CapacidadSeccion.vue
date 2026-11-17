@@ -14,6 +14,7 @@ import { Input } from '@/components/ui/input';
 import Badge from '@/components/ui/badge/Badge.vue';
 import SuccessAlert from '@/components/ui/SuccessAlert.vue';
 import { useFlashAlert } from '@/composables/useFlashAlert';
+import { esActivo } from '@/lib/status';
 import {
     Users,
     ArrowLeft,
@@ -29,7 +30,8 @@ interface SeccionItem {
     semestre_sec?: number | null;
     trayecto_sec?: number | null;
     cupo_maximo_sec?: number | null;
-    status: boolean;
+    status_id?: number;
+    status?: boolean;
     malla_curricular?: {
         nombre_mac: string;
     };
@@ -149,8 +151,8 @@ const guardarCapacidad = (id: number) => {
                                 </span>
                             </td>
                             <td class="p-4 text-center">
-                                <Badge :variant="sec.status ? 'default' : 'secondary'">
-                                    {{ sec.status ? 'Activa' : 'Inactiva' }}
+                                <Badge :variant="esActivo(sec) ? 'default' : 'secondary'">
+                                    {{ esActivo(sec) ? 'Activa' : 'Inactiva' }}
                                 </Badge>
                             </td>
                             <td class="p-4 text-center">

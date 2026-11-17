@@ -3,6 +3,7 @@
 namespace App\Http\Requests\EstructuraAcademica\Maestros;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 /**
  * Form Request: Validación para registrar Escala de Medición.
@@ -23,7 +24,12 @@ class StoreEscalaMedicionRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'nombre_esm'           => ['required', 'string', 'max:255', 'unique:escala_medicion,nombre_esm'],
+            'nombre_esm'           => [
+                'required',
+                'string',
+                'max:255',
+                Rule::unique('escala_medicion', 'nombre_esm')->whereNull('deleted_at'),
+            ],
             'nota_aprobatoria_esm' => ['required', 'numeric', 'min:0'],
             'nota_minima_esm'      => ['nullable', 'numeric', 'min:0', 'lte:nota_aprobatoria_esm'],
             'nota_maxima_esm'      => ['nullable', 'numeric', 'gte:nota_aprobatoria_esm'],

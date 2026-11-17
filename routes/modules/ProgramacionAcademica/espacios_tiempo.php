@@ -13,8 +13,10 @@ Route::middleware(['web', 'auth'])->group(function () {
         ->parameters(['turnos-academicos' => 'turno'])
         ->names('turno');
 
-    // 2. Horarios
-    Route::get('programacion-horarios', [EspacioTiempoController::class, 'horariosIndex'])->name('horarios.index');
-    Route::post('programacion-horarios/asignar-directo', [EspacioTiempoController::class, 'asignarHorarioDirecto'])->name('horarios.asignar_directo');
+    // 2. Horarios y Corrección Interactiva
+    Route::get('programacion-horarios', [EspacioTiempoController::class, 'indexHorarios'])->name('horarios.index');
+    Route::get('programacion-horarios/correccion', [EspacioTiempoController::class, 'correccionHorario'])->name('horarios.correccion');
+    Route::post('programacion-horarios/asignar-directo', [EspacioTiempoController::class, 'guardarHorarioDirecto'])->name('horarios.asignar_directo');
+    Route::post('programacion-horarios/guardar-directo', [EspacioTiempoController::class, 'guardarHorarioDirecto'])->name('horarios.guardar_directo');
     Route::delete('programacion-horarios/eliminar-bloque/{id}', [EspacioTiempoController::class, 'eliminarBloqueHorario'])->name('horarios.eliminar_bloque');
 });

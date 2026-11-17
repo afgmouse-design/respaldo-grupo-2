@@ -5,7 +5,10 @@ namespace App\Http\Controllers\OrganizacionInstitucional\Maestros;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\OrganizacionInstitucional\Maestros\StoreUniversidadRequest;
 use App\Http\Requests\OrganizacionInstitucional\Maestros\UpdateUniversidadRequest;
+use App\Models\EstructuraGeografica\Maestros\Estado;
 use App\Models\EstructuraGeografica\Maestros\Localidad;
+use App\Models\OrganizacionInstitucional\Maestros\CondicionSede;
+use App\Models\OrganizacionInstitucional\Maestros\DependenciaInstitucion;
 use App\Models\OrganizacionInstitucional\Maestros\Universidad;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -73,10 +76,11 @@ class UniversidadController extends Controller
     {
         $this->authorize('create', Universidad::class);
 
-        $localidades = Localidad::obtenerActivosConJerarquia();
-
         return Inertia::render('OrganizacionInstitucional/Universidad/create', [
-            'localidades' => $localidades,
+            'localidades'  => Localidad::obtenerActivosConJerarquia(),
+            'condiciones'  => CondicionSede::obtenerActivosParaSelect(),
+            'dependencias' => DependenciaInstitucion::obtenerActivosParaSelect(),
+            'estados'      => Estado::obtenerActivosParaSelect(),
         ]);
     }
 
@@ -125,11 +129,12 @@ class UniversidadController extends Controller
 
         $universidad = Universidad::obtenerParaEditar($id_uni);
 
-        $localidades = Localidad::obtenerActivosConJerarquia();
-
         return Inertia::render('OrganizacionInstitucional/Universidad/edit', [
-            'universidad' => $universidad,
-            'localidades' => $localidades,
+            'universidad'  => $universidad,
+            'localidades'  => Localidad::obtenerActivosConJerarquia(),
+            'condiciones'  => CondicionSede::obtenerActivosParaSelect(),
+            'dependencias' => DependenciaInstitucion::obtenerActivosParaSelect(),
+            'estados'      => Estado::obtenerActivosParaSelect(),
         ]);
     }
 
@@ -182,10 +187,26 @@ class UniversidadController extends Controller
     }
 
     /**
-     * Alterna el estatus lógico de la universidad.
+     * Ejecuta la eliminación lógica en interfaz (`deleted_at` + `status_id = 2`)
+     * propagando la baja a sus sedes asociadas sin borrar registros de PostgreSQL.
+     *
+     * Historial:
+     * - 2026-11-16: Desacoplado de `toggleStatus()` para realizar baja lógica real en interfaz.
      */
     public function destroy(int $id_uni): RedirectResponse
     {
-        return $this->toggleStatus($id_uni);
+        $this->authorize('delete', Universidad::class);
+
+        try {
+            $resultado = Universidad::eliminarConCascada($id_uni, auth()->id());
+
+            return redirect()
+                ->back()
+                ->with('success', "La universidad '{$resultado['nombre']}' y sus sedes asociadas han sido eliminadas exitosamente.");
+        } catch (\Throwable $e) {
+            return redirect()
+                ->back()
+                ->withErrors(['error' => 'No se pudo eliminar la universidad y sus sedes asociadas.']);
+        }
     }
 }

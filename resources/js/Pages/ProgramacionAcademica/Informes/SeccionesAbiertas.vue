@@ -42,9 +42,9 @@ const imprimir = () => {
 
 <template>
     <AppLayout :breadcrumbs="[
-        { title: 'Programación Académica', href: route('seccion.index') },
-        { title: 'Informes', href: route('informes.secciones') },
-        { title: 'Secciones Abiertas', href: route('informes.secciones_abiertas') },
+        { title: 'Programación Académica', subtitle: 'Secciones', href: route('seccion.index') },
+        { title: 'Informes', subtitle: 'Programación', href: route('informes.secciones') },
+        { title: 'Secciones Abiertas', subtitle: 'Activas', href: route('informes.secciones_abiertas') },
     ]">
         <Head title="Secciones Abiertas - SOGAC" />
 
@@ -104,14 +104,14 @@ const imprimir = () => {
                             </td>
                             <td class="p-4">
                                 <Badge variant="outline" class="text-xs">
-                                    {{ sec.tipo_seccion || 'Regular' }}
+                                    {{ sec.tipo_seccion?.nombre_tis || sec.tipo_seccion || 'Regular' }}
                                 </Badge>
                             </td>
                             <td class="p-4 text-xs text-muted-foreground">
                                 {{ sec.malla_curricular?.nombre_mac || 'Sin Malla' }}
                             </td>
                             <td class="p-4 text-xs">
-                                {{ sec.turno_sec || 'Matutino' }}
+                                {{ sec.turno?.nombre_tur || sec.turno_sec || 'Matutino' }}
                             </td>
                             <td class="p-4 text-center font-medium">
                                 T{{ sec.trayecto_sec ?? 1 }} / S{{ sec.semestre_sec ?? 1 }}

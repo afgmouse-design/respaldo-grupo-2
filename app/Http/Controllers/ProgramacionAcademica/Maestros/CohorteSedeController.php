@@ -1,5 +1,10 @@
 <?php
 
+/**
+ * Propósito: Controlador CRUD del Maestro Cohorte por Sede (`cohorte_sede`).
+ * Historial: Actualizado para consultar `sede_programa` (`id_spr`, `status_id = 1`) y `programa` (`nombre_prg`), eliminando el uso de `sede_pnf`, `pnf` y el campo booleano `status`.
+ */
+
 namespace App\Http\Controllers\ProgramacionAcademica\Maestros;
 
 use App\Http\Controllers\Controller;
@@ -12,22 +17,39 @@ use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 
-/**
- * Controlador: Maestro de Cohorte por Sede (Programación Académica).
- *
- * Propósito: CRUD SPA con Inertia; crear/editar/ver se resuelven mediante modales.
- * Provee selectores para la asignación de Cohorte y Oferta Académica (Sede-PNF).
- *
- * Actualización 2026-10-21 (Restauración de relación Oferta Sede-PNF):
- * Se restauró el envío del listado `ofertasSedePnf` al frontend y el filtro `sep_id`, resolviendo
- * la discrepancia con la tabla `cohorte_sede` y evitando el fallo al consultar `sed_id` inexistente.
- *
- * Actualización 2026-10-21 (Visualización Predeterminada de Todas las Ofertas y Filtros):
- * Se ajustó `index()` para pasar filtros por defecto 'all' para estatus, cohorte y oferta,
- * permitiendo listar todas las asignaciones registradas al entrar sin restringir indebidamente a activas.
- */
 class CohorteSedeController extends Controller
 {
+    /**
+     * Carga cohortes y ofertas Sede-Programa activas para los selectores del módulo.
+     */
+    private function cargarCatalogos(): array
+    {
+        $cohortes = DB::table('cohorte')
+            ->select('id_coh', 'nombre_coh')
+            ->whereNull('deleted_at')
+            ->orderBy('nombre_coh', 'asc')
+            ->get();
+
+        $ofertasSedePrograma = DB::table('sede_programa')
+            ->join('sede', 'sede.id_sed', '=', 'sede_programa.sed_id')
+            ->join('programa', 'programa.id_prg', '=', 'sede_programa.prg_id')
+            ->where('sede_programa.status_id', 1)
+            ->whereNull('sede_programa.deleted_at')
+            ->select(
+                'sede_programa.id_spr',
+                'sede_programa.id_spr as id_sep',
+                DB::raw("sede.nombre_sed || ' - ' || programa.nombre_prg as descripcion_oferta")
+            )
+            ->orderBy('sede.nombre_sed', 'asc')
+            ->orderBy('programa.nombre_prg', 'asc')
+            ->get();
+
+        return [
+            'cohortes'       => $cohortes,
+            'ofertasSedePnf' => $ofertasSedePrograma,
+        ];
+    }
+
     public function index(Request $request): Response
     {
         $this->authorize('viewAny', CohorteSede::class);
@@ -40,62 +62,24 @@ class CohorteSedeController extends Controller
             'sep_id' => $request->input('sep_id', 'all'),
         ];
 
-        $cohortesSede = CohorteSede::obtenerPaginados($filtros, $perPage);
-
-        $cohortes = DB::table('cohorte')
-            ->select('id_coh', 'nombre_coh')
-            ->whereNull('deleted_at')
-            ->orderBy('nombre_coh', 'asc')
-            ->get();
-
-        // Obtiene las ofertas activas vinculando Sede y PNF (ej: "Sede Principal - Informática")
-        $ofertasSedePnf = DB::table('sede_pnf')
-            ->join('sede', 'sede.id_sed', '=', 'sede_pnf.sed_id')
-            ->join('pnf', 'pnf.id_pnf', '=', 'sede_pnf.pnf_id')
-            ->where('sede_pnf.status', true)
-            ->whereNull('sede_pnf.deleted_at')
-            ->select('sede_pnf.id_sep', DB::raw("sede.nombre_sed || ' - ' || pnf.nombre_pnf as descripcion_oferta"))
-            ->orderBy('sede.nombre_sed', 'asc')
-            ->orderBy('pnf.nombre_pnf', 'asc')
-            ->get();
-
-        return Inertia::render('ProgramacionAcademica/Maestros/CohorteSede/index', [
-            'cohortesSede'   => $cohortesSede,
-            'cohortes'       => $cohortes,
-            'ofertasSedePnf' => $ofertasSedePnf,
-            'filters'        => $filtros,
-        ]);
+        return Inertia::render('ProgramacionAcademica/Maestros/CohorteSede/index', array_merge([
+            'cohortesSede' => CohorteSede::obtenerPaginados($filtros, $perPage),
+            'filters'      => $filtros,
+        ], $this->cargarCatalogos()));
     }
 
     public function create(): Response
     {
         $this->authorize('create', CohorteSede::class);
 
-        $cohortes = DB::table('cohorte')
-            ->select('id_coh', 'nombre_coh')
-            ->whereNull('deleted_at')
-            ->orderBy('nombre_coh', 'asc')
-            ->get();
-
-        $ofertasSedePnf = DB::table('sede_pnf')
-            ->join('sede', 'sede.id_sed', '=', 'sede_pnf.sed_id')
-            ->join('pnf', 'pnf.id_pnf', '=', 'sede_pnf.pnf_id')
-            ->where('sede_pnf.status', true)
-            ->whereNull('sede_pnf.deleted_at')
-            ->select('sede_pnf.id_sep', DB::raw("sede.nombre_sed || ' - ' || pnf.nombre_pnf as descripcion_oferta"))
-            ->orderBy('sede.nombre_sed', 'asc')
-            ->orderBy('pnf.nombre_pnf', 'asc')
-            ->get();
-
-        return Inertia::render('ProgramacionAcademica/Maestros/CohorteSede/create', [
-            'cohortes'       => $cohortes,
-            'ofertasSedePnf' => $ofertasSedePnf,
-        ]);
+        return Inertia::render('ProgramacionAcademica/Maestros/CohorteSede/create', $this->cargarCatalogos());
     }
 
     public function show(int $cohorte_sede): Response
     {
-        $registro = CohorteSede::with(['cohorte', 'sedePnf.sede', 'sedePnf.pnf'])->where('id_cos', $cohorte_sede)->firstOrFail();
+        $registro = CohorteSede::with(['cohorte', 'sedePrograma.sede', 'sedePrograma.programa'])
+            ->where('id_cos', $cohorte_sede)
+            ->firstOrFail();
         $this->authorize('view', $registro);
 
         return Inertia::render('ProgramacionAcademica/Maestros/CohorteSede/show', [
@@ -108,27 +92,9 @@ class CohorteSedeController extends Controller
         $registro = CohorteSede::where('id_cos', $cohorte_sede)->firstOrFail();
         $this->authorize('update', $registro);
 
-        $cohortes = DB::table('cohorte')
-            ->select('id_coh', 'nombre_coh')
-            ->whereNull('deleted_at')
-            ->orderBy('nombre_coh', 'asc')
-            ->get();
-
-        $ofertasSedePnf = DB::table('sede_pnf')
-            ->join('sede', 'sede.id_sed', '=', 'sede_pnf.sed_id')
-            ->join('pnf', 'pnf.id_pnf', '=', 'sede_pnf.pnf_id')
-            ->where('sede_pnf.status', true)
-            ->whereNull('sede_pnf.deleted_at')
-            ->select('sede_pnf.id_sep', DB::raw("sede.nombre_sed || ' - ' || pnf.nombre_pnf as descripcion_oferta"))
-            ->orderBy('sede.nombre_sed', 'asc')
-            ->orderBy('pnf.nombre_pnf', 'asc')
-            ->get();
-
-        return Inertia::render('ProgramacionAcademica/Maestros/CohorteSede/edit', [
-            'cohorteSede'    => $registro,
-            'cohortes'       => $cohortes,
-            'ofertasSedePnf' => $ofertasSedePnf,
-        ]);
+        return Inertia::render('ProgramacionAcademica/Maestros/CohorteSede/edit', array_merge([
+            'cohorteSede' => $registro,
+        ], $this->cargarCatalogos()));
     }
 
     public function store(StoreCohorteSedeRequest $request): RedirectResponse
@@ -136,15 +102,35 @@ class CohorteSedeController extends Controller
         $this->authorize('create', CohorteSede::class);
 
         try {
-            CohorteSede::create($request->validated() + [
-                'status'     => true,
-                'status_id'  => 1,
-                'created_id' => auth()->id(),
-            ]);
+            $validated = $request->validated();
+
+            DB::transaction(function () use ($validated) {
+                $existente = CohorteSede::withTrashed()
+                    ->where('coh_id', $validated['coh_id'])
+                    ->where('sep_id', $validated['sep_id'])
+                    ->first();
+
+                if ($existente && $existente->trashed()) {
+                    $existente->restore();
+                    $existente->update(array_merge($validated, [
+                        'status_id'  => CohorteSede::STATUS_ACTIVO,
+                        'updated_id' => auth()->id(),
+                    ]));
+
+                    return;
+                }
+
+                CohorteSede::create($validated + [
+                    'status_id'  => CohorteSede::STATUS_ACTIVO,
+                    'created_id' => auth()->id(),
+                    'updated_id' => auth()->id(),
+                ]);
+            });
 
             return redirect()->route('cohorte_sede.index')->with('success', 'Cohorte por sede registrada correctamente.');
         } catch (\Throwable $e) {
             report($e);
+
             return redirect()->back()->withErrors(['error' => 'Ocurrió un error al registrar la cohorte por sede.']);
         }
     }
@@ -156,7 +142,6 @@ class CohorteSedeController extends Controller
 
         try {
             $data = $request->validated();
-            // Regla de Negocio: No se permite modificar la cohorte padre durante la edición
             $data['coh_id'] = $registro->coh_id;
 
             $registro->update($data + ['updated_id' => auth()->id()]);
@@ -164,25 +149,43 @@ class CohorteSedeController extends Controller
             return redirect()->route('cohorte_sede.index')->with('success', 'Cohorte por sede actualizada correctamente.');
         } catch (\Throwable $e) {
             report($e);
+
             return redirect()->back()->withErrors(['error' => 'Ocurrió un error al actualizar la cohorte por sede.']);
         }
     }
 
-    public function destroy(int $cohorte_sede): RedirectResponse
+    /**
+     * Si recibe `eliminar=1`, ejecuta baja lógica en interfaz (`deleted_at` + `status_id = 2`);
+     * de lo contrario invierte únicamente el estatus lógico (`status_id` 1 <-> 2).
+     *
+     * Historial:
+     * - 2026-11-16: Separada la eliminación lógica (`eliminar=1`) del toggle de estado.
+     */
+    public function destroy(Request $request, int $cohorte_sede): RedirectResponse
     {
         $registro = CohorteSede::where('id_cos', $cohorte_sede)->firstOrFail();
         $this->authorize('delete', $registro);
 
         try {
+            if ($request->boolean('eliminar')) {
+                CohorteSede::ejecutarBajaLogicaModelo($registro, auth()->id(), CohorteSede::STATUS_INACTIVO);
+
+                return redirect()->back()->with('success', "La cohorte por sede '{$registro->nombre_cos}' ha sido eliminada correctamente.");
+            }
+
             $nuevoEstado = $registro->status_id === 1 ? 2 : 1;
             CohorteSede::alternarEstatus($cohorte_sede, $nuevoEstado);
 
-            return redirect()->back()->with('success', $nuevoEstado === 1
-                ? 'Cohorte por sede activada correctamente.'
-                : 'Cohorte por sede desactivada correctamente.');
+            return redirect()->back()->with(
+                'success',
+                $nuevoEstado === 1
+                    ? 'Cohorte por sede activada correctamente.'
+                    : 'Cohorte por sede desactivada correctamente.'
+            );
         } catch (\Throwable $e) {
             report($e);
-            return redirect()->back()->withErrors(['error' => 'No se pudo alternar el estatus de la cohorte por sede.']);
+
+            return redirect()->back()->withErrors(['error' => 'No se pudo procesar la solicitud sobre la cohorte por sede.']);
         }
     }
 }

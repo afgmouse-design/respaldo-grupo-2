@@ -4,41 +4,46 @@
  *
  * Propósito: Página para consultar, buscar, filtrar y gestionar los planes de estudio
  * y mallas curriculares registradas en el SOGAC siguiendo el diseño estándar de PNF / Trayecto / Sede.
+ *
+ * Historial:
+ * - 2026-11-16: Estandarización global con <CrudActionButtons /> y botón superior "Nueva Malla Curricular".
  */
-import { ref, watch, computed } from 'vue';
 import { Head, Link, router } from '@inertiajs/vue3';
-import { route } from 'ziggy-js';
-import AppLayout from '@/layouts/AppLayout.vue';
-import { Button } from '@/components/ui/button';
-import SuccessAlert from '@/components/ui/SuccessAlert.vue';
-import StatusSwitch from '@/components/ui/StatusSwitch.vue';
-import DataTable from '@/components/ui/DataTable.vue';
-import DataPagination from '@/components/ui/DataPagination.vue';
-import TableSkeleton from '@/components/ui/TableSkeleton.vue';
-import SearchFilter from '@/components/ui/filters/SearchFilter.vue';
-import TabFilter from '@/components/ui/filters/TabFilter.vue';
-import { useDataFetching } from '@/composables/useDataFetching';
-import { useFlashAlert } from '@/composables/useFlashAlert';
-import { useConfirmDialog } from '@/composables/useConfirmDialog';
-import type { Column } from '@/types/dataTable';
-import type { BreadcrumbItem } from '@/types/navigation';
 import {
-    Network,
-    Plus,
-    Eye,
-    Pencil,
-    Trash2,
-    Power,
-    X,
-    GraduationCap,
     Calendar,
     FileText,
+    GraduationCap,
+    Network,
+    Plus,
+    X,
 } from 'lucide-vue-next';
+import { computed, ref, watch } from 'vue';
+import { route } from 'ziggy-js';
+import { Button } from '@/components/ui/button';
+import CrudActionButtons from '@/components/ui/CrudActionButtons.vue';
+import DataPagination from '@/components/ui/DataPagination.vue';
+import DataTable from '@/components/ui/DataTable.vue';
+import SearchFilter from '@/components/ui/filters/SearchFilter.vue';
+import TabFilter from '@/components/ui/filters/TabFilter.vue';
+import StatusSwitch from '@/components/ui/StatusSwitch.vue';
+import SuccessAlert from '@/components/ui/SuccessAlert.vue';
+import TableSkeleton from '@/components/ui/TableSkeleton.vue';
+import { useConfirmDialog } from '@/composables/useConfirmDialog';
+import { useDataFetching } from '@/composables/useDataFetching';
+import { useFlashAlert } from '@/composables/useFlashAlert';
+import AppLayout from '@/layouts/AppLayout.vue';
+import { esActivo } from '@/lib/status';
+import type { Column } from '@/types/dataTable';
+import type { BreadcrumbItem } from '@/types/navigation';
 
-interface PnfItem {
-    id_pnf: number;
+interface ProgramaItem {
+    id_prg?: number;
+    id_pnf?: number;
+    codigo_prg?: string | null;
+    codigo_ministerio_prg?: string | null;
     codigo_pnf?: string | null;
-    nombre_pnf: string;
+    nombre_prg?: string;
+    nombre_pnf?: string;
 }
 
 interface MallaCurricularItem {
@@ -48,17 +53,21 @@ interface MallaCurricularItem {
     version_pensum_mac?: string | null;
     fecha_aprobacion_mac: string | null;
     observacion_mac: string | null;
-    pnf_id: number;
+    prg_id?: number;
+    pnf_id?: number;
+    total_credito_tsu_mac?: number | null;
+    total_horas_tsu_mac?: number | null;
+    total_unidades_tsu_mac?: number | null;
+    total_credito_ing_mac?: number | null;
+    total_horas_ing_mac?: number | null;
+    total_unidades_ing_mac?: number | null;
+    total_credito_prosecucion_mac?: number | null;
     creditos_minimos_tsu_mac?: number | null;
-    horas_minimas_tsu_mac?: number | null;
-    materias_obligatorias_tsu_mac?: number | null;
     creditos_minimos_ing_mac?: number | null;
-    horas_minimas_ing_mac?: number | null;
-    materias_obligatorias_ing_mac?: number | null;
-    creditos_minimos_prosecucion_mac?: number | null;
-    pnf?: PnfItem | null;
-    status_id: number;
-    status: boolean;
+    programa?: ProgramaItem | null;
+    pnf?: ProgramaItem | null;
+    status_id?: number;
+    status?: boolean;
     created_at?: string;
     updated_at?: string;
 }
@@ -76,6 +85,7 @@ const props = defineProps<{
     filters: {
         search?: string;
         status?: string;
+        status_id?: string;
         per_page?: number | string;
         registros_per_page?: number | string;
     };
@@ -94,7 +104,7 @@ const { confirmDialog } = useConfirmDialog();
 const columns: Column[] = [
     { key: 'id_mac', label: 'ID', align: 'center', width: 'w-16' },
     { key: 'nombre_mac', label: 'Nombre Malla', align: 'left' },
-    { key: 'pnf', label: 'PNF', align: 'left', width: 'w-64' },
+    { key: 'programa', label: 'Programa / PNF', align: 'left', width: 'w-64' },
     { key: 'codigo_gaceta_mac', label: 'Gaceta', align: 'center', width: 'w-36' },
     { key: 'fecha_aprobacion_mac', label: 'Fecha', align: 'center', width: 'w-32' },
     { key: 'status', label: 'Estatus', align: 'center', width: 'w-28' },
@@ -136,7 +146,7 @@ watch(
 );
 
 const alternarEstatus = async (row: MallaCurricularItem) => {
-    const activo = (row as any).status ?? ((row as any).status_id === 1);
+    const activo = esActivo(row);
     const accion = activo ? 'desactivar' : 'activar';
 
     if (await confirmDialog(
@@ -148,16 +158,6 @@ const alternarEstatus = async (row: MallaCurricularItem) => {
             : route('malla_curricular.status', row.id_mac);
         router.patch(rutaStatus, {}, { preserveScroll: true });
     }
-};
-
-const eliminarRegistro = async (ruta: string, row?: MallaCurricularItem) => { 
-    const nombre = row?.nombre_mac ?? 'esta malla curricular';
-    if (await confirmDialog(
-        `¿Está seguro de que desea dar de baja "${nombre}"?`,
-        'Confirmar baja lógica'
-    )) { 
-        router.delete(ruta, { preserveScroll: true }); 
-    } 
 };
 </script>
 
@@ -190,10 +190,10 @@ const eliminarRegistro = async (ruta: string, row?: MallaCurricularItem) => {
                 </div>
 
                 <div class="flex items-center gap-2">
-                    <Button as-child size="default" class="shadow-sm">
+                    <Button as-child size="default" class="gap-2 shadow-sm">
                         <Link :href="route('academico.malla-curricular.create')">
-                            <Plus class="h-4 w-4 mr-2" />
-                            Registrar Malla Curricular
+                            <Plus class="h-4 w-4" />
+                            Nueva Malla Curricular
                         </Link>
                     </Button>
                 </div>
@@ -264,23 +264,23 @@ const eliminarRegistro = async (ruta: string, row?: MallaCurricularItem) => {
                                 </Badge>
                             </div>
                             <div class="flex items-center gap-2 mt-1 text-[11px] text-muted-foreground">
-                                <span>TSU: <strong class="text-foreground">{{ row.creditos_minimos_tsu_mac || 96 }} UC</strong></span>
+                                <span>TSU: <strong class="text-foreground">{{ row.total_credito_tsu_mac ?? row.creditos_minimos_tsu_mac ?? 0 }} UC</strong></span>
                                 <span>•</span>
-                                <span>Ingeniería: <strong class="text-foreground">{{ row.creditos_minimos_ing_mac || 180 }} UC</strong></span>
+                                <span>Ingeniería: <strong class="text-foreground">{{ row.total_credito_ing_mac ?? row.creditos_minimos_ing_mac ?? 0 }} UC</strong></span>
                             </div>
                         </div>
                     </template>
 
-                    <!-- SLOT: PNF -->
-                    <template #pnf="{ row }">
-                        <div v-if="row.pnf" class="flex items-center gap-1.5 text-xs text-slate-700 dark:text-slate-300">
+                    <!-- SLOT: PROGRAMA / PNF -->
+                    <template #programa="{ row }">
+                        <div v-if="row.programa || row.pnf" class="flex items-center gap-1.5 text-xs text-slate-700 dark:text-slate-300">
                             <GraduationCap class="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                            <span class="truncate" :title="row.pnf.nombre_pnf">
-                                {{ row.pnf.nombre_pnf }}
+                            <span class="truncate" :title="row.programa?.nombre_prg || row.pnf?.nombre_pnf">
+                                {{ row.programa?.nombre_prg || row.pnf?.nombre_pnf }}
                             </span>
                         </div>
                         <span v-else class="text-xs text-muted-foreground italic">
-                            Sin PNF asignado
+                            Sin programa asignado
                         </span>
                     </template>
 
@@ -309,52 +309,23 @@ const eliminarRegistro = async (ruta: string, row?: MallaCurricularItem) => {
                     <!-- SLOT: ESTATUS -->
                     <template #status="{ row }">
                         <StatusSwitch
-                            :key="`malla-${row.id_mac}-${row.status ?? row.status_id}`"
-                            :status="row.status ?? (row.status_id === 1)"
+                            :key="`malla-${row.id_mac}-${row.status_id ?? row.status}`"
+                            :status="esActivo(row)"
                             @toggle="alternarEstatus(row)"
                         />
                     </template>
 
-                    <!-- SLOT: ACCIONES DIRECTAS STANDALONE -->
+                    <!-- SLOT: ACCIONES ESTÁNDAR -->
                     <template #actions="{ row, item }">
-                        <div class="flex items-center justify-center gap-1.5">
-                            <!-- Ver Detalle -->
-                            <Button
-                                as-child
-                                variant="ghost"
-                                size="icon"
-                                class="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950/40"
-                                title="Ver detalles"
-                            >
-                                <Link :href="route().has('academico.malla-curricular.show') ? route('academico.malla-curricular.show', (row || item).id_mac) : route('malla_curricular.show', (row || item).id_mac)">
-                                    <Eye class="h-4 w-4" />
-                                </Link>
-                            </Button>
-
-                            <!-- Editar -->
-                            <Button
-                                as-child
-                                variant="ghost"
-                                size="icon"
-                                class="h-8 w-8 text-amber-600 hover:text-amber-700 dark:text-amber-400"
-                                title="Editar datos"
-                            >
-                                <Link :href="route().has('academico.malla-curricular.edit') ? route('academico.malla-curricular.edit', (row || item).id_mac) : route('malla_curricular.edit', (row || item).id_mac)">
-                                    <Pencil class="h-4 w-4" />
-                                </Link>
-                            </Button>
-
-                            <!-- Desactivar / Baja Lógica -->
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                class="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
-                                :title="(row || item)?.status ? 'Desactivar malla' : 'Activar malla'"
-                                @click="alternarEstatus(row || item)"
-                            >
-                                <Power class="h-4 w-4" />
-                            </Button>
-                        </div>
+                        <CrudActionButtons
+                            :show-href="route().has('academico.malla-curricular.show') ? route('academico.malla-curricular.show', (row || item).id_mac) : route('malla_curricular.show', (row || item).id_mac)"
+                            :edit-href="route().has('academico.malla-curricular.edit') ? route('academico.malla-curricular.edit', (row || item).id_mac) : route('malla_curricular.edit', (row || item).id_mac)"
+                            :delete-href="route().has('academico.malla-curricular.destroy') ? route('academico.malla-curricular.destroy', (row || item).id_mac) : route('malla_curricular.destroy', (row || item).id_mac)"
+                            :record-id="(row || item).id_mac"
+                            :record-name="(row || item).nombre_mac"
+                            confirm-title="Confirmar baja lógica"
+                            :confirm-message="`¿Está seguro de que desea dar de baja &quot;${(row || item).nombre_mac ?? 'esta malla curricular'}&quot;?`"
+                        />
                     </template>
                 </DataTable>
             </div>

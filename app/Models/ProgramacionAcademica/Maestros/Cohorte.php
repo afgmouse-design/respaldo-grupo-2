@@ -2,8 +2,14 @@
 
 namespace App\Models\ProgramacionAcademica\Maestros;
 
+use App\Models\Academico\LapsoAcademico;
 use App\Models\Concerns\RegistraEnBitacora;
+use App\Models\Concerns\UsesStatusCatalog;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
 
@@ -11,27 +17,18 @@ use Illuminate\Support\Facades\DB;
  * Modelo: Cohorte (tabla `cohorte`).
  *
  * Propósito: Agrupación temporal de estudiantes de nuevo ingreso vinculada a un Lapso Académico.
- * Baja lógica mediante `status` (bool) y `status_id` (1 activo, 2 inactivo).
+ * Baja lógica mediante `status_id` (1 activo, 2 inactivo) y regla de única cohorte activa.
  *
- * Actualización 2026-10-21 (Regla de Negocio: Única Cohorte Activa y Desactivación en Cascada):
- * Se incorporó la validación en `alternarEstatus()` para impedir activar más de una cohorte
- * simultáneamente en el sistema y verificar que el Lapso Académico padre se encuentre activo.
- * Se implementó la desactivación en cascada sobre `cohorte_sede` cuando una cohorte pasa a inactiva.
- * Se robusteció `obtenerPaginados()` para soportar el TabFilter ('all', '0', '').
- *
- * Actualización 2026-10-21 (Corrección Filtro Inicial y Visualización de Todas las Cohortes):
- * Se ajustó `obtenerPaginados()` para que por defecto ('all' o sin filtro explícito) no restrinja
- * la consulta únicamente a cohortes activas, evitando mostrar una lista vacía cuando las cohortes
- * existentes están inactivas y permitiendo visualizar todas las cohortes registradas al ingresar
- * o al seleccionar la opción 'Todos'.
- *
- * Actualización 2026-10-21 (Soporte para Eliminación en Cascada y deleted_at en Fillable):
- * Se incorporó `deleted_at` en `$fillable` y `$casts`. Se filtró por `whereNull('deleted_at')`
- * en `alternarEstatus()` para la comprobación de cohorte activa y lapso activo.
+ * Historial:
+ *  - 2026-11-14: Alineado a `sogac_mio.sql` (`status_id` sin booleano `status`, `SoftDeletes`);
+ *    se corrigió el join y la validación ascendente sobre `lapso_academico.id_laa` y `nombre_laa`
+ *    (antes consultaba columnas inexistentes `id_la`, `nombre_la` y `estado_la`).
  */
 class Cohorte extends Model
 {
+    use SoftDeletes;
     use RegistraEnBitacora;
+    use UsesStatusCatalog;
 
     protected $table = 'cohorte';
 
@@ -43,112 +40,122 @@ class Cohorte extends Model
         'nombre_coh',
         'fecha_inicio_coh',
         'laa_id',
-        'status',
         'status_id',
         'created_id',
         'updated_id',
-        'deleted_at',
     ];
 
     protected $casts = [
         'id_coh'           => 'integer',
         'fecha_inicio_coh' => 'date',
         'laa_id'           => 'integer',
-        'status'           => 'boolean',
         'status_id'        => 'integer',
-        'deleted_at'       => 'datetime',
     ];
 
     /**
-     * Listado paginado con filtros (search, status, laa_id).
-     * Por defecto ('all', null o vacío) muestra todas las cohortes registradas.
-     * Expone `id` (alias de id_coh) y `nombre_la`.
+     * Relación con el Lapso Académico de la cohorte.
+     */
+    public function lapsoAcademico(): BelongsTo
+    {
+        return $this->belongsTo(LapsoAcademico::class, 'laa_id', 'id_laa');
+    }
+
+    /**
+     * Relación con las asignaciones de esta cohorte por sede y programa.
+     */
+    public function cohortesSede(): HasMany
+    {
+        return $this->hasMany(CohorteSede::class, 'coh_id', 'id_coh');
+    }
+
+    /**
+     * Scope para cohortes activas (`status_id = 1`).
+     */
+    public function scopeActivos(Builder $query): Builder
+    {
+        return $query->where('status_id', self::STATUS_ACTIVO);
+    }
+
+    /**
+     * Listado paginado con filtros (`search`, `status`, `laa_id`).
+     * Expone `id` (alias de `id_coh`) y `nombre_laa`.
      */
     public static function obtenerPaginados(array $filtros = [], int $perPage = 10): LengthAwarePaginator
     {
-        $search = $filtros['search'] ?? null;
-        $status = $filtros['status'] ?? 'all';
-        $laaId  = $filtros['laa_id'] ?? null;
+        $search   = $filtros['search'] ?? null;
+        $statusId = static::resolverFiltroStatusId($filtros['status'] ?? $filtros['status_id'] ?? null);
+        $laaId    = $filtros['laa_id'] ?? null;
 
-        $query = DB::table('cohorte')
-            ->leftJoin('lapso_academico', 'lapso_academico.id_la', '=', 'cohorte.laa_id')
-            ->select('cohorte.*', 'cohorte.id_coh as id', 'lapso_academico.nombre_la')
-            ->whereNull('cohorte.deleted_at');
-
-        // Filtrado dinámico por estatus (TabFilter: 'all', 'true', 'false'):
-        if ($status === 'true' || $status === '1' || $status === 1 || $status === true) {
-            $query->where(function ($w) {
-                $w->where('cohorte.status', true)
-                  ->orWhere('cohorte.status_id', 1);
-            });
-        } elseif ($status === 'false' || $status === '0' || $status === 0 || $status === false) {
-            $query->where(function ($w) {
-                $w->where('cohorte.status', false)
-                  ->orWhere('cohorte.status_id', 2);
-            });
-        }
-        // Si $status es 'all', null o vacío, no se aplica filtro para listar todas las cohortes
-
-        if (!empty($laaId) && $laaId !== 'all') {
-            $query->where('cohorte.laa_id', $laaId);
-        }
-
-        if (!empty($search)) {
-            $query->where('cohorte.nombre_coh', 'ilike', "%{$search}%");
-        }
-
-        return $query->orderBy('cohorte.id_coh', 'desc')
+        return DB::table('cohorte')
+            ->leftJoin('lapso_academico', 'lapso_academico.id_laa', '=', 'cohorte.laa_id')
+            ->select(
+                'cohorte.*',
+                'cohorte.id_coh as id',
+                'lapso_academico.nombre_laa',
+                'lapso_academico.codigo_laa'
+            )
+            ->whereNull('cohorte.deleted_at')
+            ->when($statusId !== null, fn ($q) => $q->where('cohorte.status_id', $statusId))
+            ->when(! empty($laaId) && $laaId !== 'all', fn ($q) => $q->where('cohorte.laa_id', (int) $laaId))
+            ->when(! empty($search), function ($q) use ($search) {
+                $q->where(function ($w) use ($search) {
+                    $w->where('cohorte.nombre_coh', 'ilike', "%{$search}%")
+                        ->orWhere('lapso_academico.nombre_laa', 'ilike', "%{$search}%")
+                        ->orWhere('lapso_academico.codigo_laa', 'ilike', "%{$search}%");
+                });
+            })
+            ->orderBy('cohorte.id_coh', 'desc')
             ->paginate($perPage)
             ->withQueryString();
     }
 
     /**
-     * Baja/alta lógica: fija status_id (1 = activo, 2 = inactivo) y sincroniza `status`.
-     * Aplica la regla "Única Cohorte Activa", protección ascendente y desactivación en cascada.
+     * Baja/alta lógica: fija `status_id` (1 = activo, 2 = inactivo).
+     * Aplica la regla "Única Cohorte Activa", protección ascendente hacia el Lapso Académico
+     * y desactivación en cascada sobre `cohorte_sede`.
      *
      * @throws \DomainException
      */
-    public static function alternarEstatus(int $id, int $estado = 2, ?int $userId = null): bool
+    public static function alternarEstatus(int $id, int $estado = self::STATUS_INACTIVO, ?int $userId = null): bool
     {
         return DB::transaction(function () use ($id, $estado, $userId) {
             $registro = static::query()->where('id_coh', $id)->firstOrFail();
             $usuarioId = $userId ?? auth()->id();
 
-            if ($estado === 1) {
-                // Protección Ascendente: No activar si el Lapso Padre está inactivo
-                if (!empty($registro->laa_id)) {
-                    $lapso = DB::table('lapso_academico')->where('id_la', $registro->laa_id)->whereNull('deleted_at')->first();
-                    if (!$lapso || !$lapso->estado_la) {
-                        throw new \DomainException("No se puede activar la cohorte porque el Lapso Académico al que pertenece se encuentra inactivo.");
+            if ($estado === self::STATUS_ACTIVO) {
+                if (! empty($registro->laa_id)) {
+                    $lapso = DB::table('lapso_academico')
+                        ->where('id_laa', $registro->laa_id)
+                        ->whereNull('deleted_at')
+                        ->first();
+
+                    if (! $lapso || (int) $lapso->status_id !== self::STATUS_ACTIVO) {
+                        throw new \DomainException('No se puede activar la cohorte porque el Lapso Académico al que pertenece se encuentra inactivo.');
                     }
                 }
 
-                // Regla de Negocio: Única Cohorte Activa
                 $otraActiva = static::query()
                     ->where('id_coh', '!=', $id)
-                    ->where('status_id', 1)
+                    ->where('status_id', self::STATUS_ACTIVO)
                     ->whereNull('deleted_at')
                     ->exists();
 
                 if ($otraActiva) {
-                    throw new \DomainException("Ya existe otra Cohorte activa en el sistema. Desactive la cohorte en curso antes de activar otra.");
+                    throw new \DomainException('Ya existe otra Cohorte activa en el sistema. Desactive la cohorte en curso antes de activar otra.');
                 }
             }
 
-            // 1. Actualizar la Cohorte
-            $actualizado = $registro->update([
+            $actualizado = (bool) $registro->update([
                 'status_id'  => $estado,
-                'status'     => $estado === 1,
                 'updated_id' => $usuarioId,
             ]);
 
-            // 2. Desactivación en cascada: Si se desactiva la cohorte, desactivar cohorte_sede dependientes
-            if ($estado === 2) {
+            if ($estado === self::STATUS_INACTIVO) {
                 DB::table('cohorte_sede')
                     ->where('coh_id', $id)
+                    ->whereNull('deleted_at')
                     ->update([
-                        'status_id'  => 2,
-                        'status'     => false,
+                        'status_id'  => self::STATUS_INACTIVO,
                         'updated_id' => $usuarioId,
                         'updated_at' => now(),
                     ]);
@@ -158,4 +165,3 @@ class Cohorte extends Model
         });
     }
 }
-

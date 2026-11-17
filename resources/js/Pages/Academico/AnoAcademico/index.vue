@@ -2,44 +2,43 @@
 /**
  * Vista de Listado: Gestión de Año Académico (Módulo: Estructura Académica).
  *
- * Propósito: Muestra el catálogo de años académicos permitiendo búsqueda,
+ * Propósito: Muestra el catálogo de años académicos (`ano_academico`) permitiendo búsqueda,
  * filtrado por estatus, paginación reactiva y acciones directas (editar, alternar estatus).
  *
- * Actualización (Interruptor de Estado - StatusSwitch):
- * Se incorporó el suiche interactivo en la columna de Estatus para activar y desactivar
- * años académicos directamente con confirmación modal.
+ * Historial:
+ *  - 2026-11-14: Alineado a esquema `sogac_mio.sql` (`id_ana`, `nombre_ana`, `fecha_inicio_ana`,
+ *    `fecha_fin_ana`, `status_id` mediante `@/lib/status`).
+ *  - 2026-11-16: Estandarización de acciones de tabla con <CrudActionButtons />.
  */
-import { computed } from 'vue';
 import { Head, Link, router } from '@inertiajs/vue3';
+import { Calendar, Plus, X } from 'lucide-vue-next';
 import { route } from 'ziggy-js';
-import { Plus, X, Eye, Pencil, Power, Calendar } from 'lucide-vue-next';
 
 // Layout e UI Reutilizable
-import AppLayout from '@/layouts/AppLayout.vue';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableEmpty } from '@/components/ui/table';
-import DataPagination from '@/components/ui/DataPagination.vue';
-import SuccessAlert from '@/components/ui/SuccessAlert.vue';
-import Badge from '@/components/ui/badge/Badge.vue';
-import StatusSwitch from '@/components/ui/StatusSwitch.vue';
 import { Button } from '@/components/ui/button';
-import TableSkeleton from '@/components/ui/TableSkeleton.vue';
-
-// Filtros
+import CrudActionButtons from '@/components/ui/CrudActionButtons.vue';
+import DataPagination from '@/components/ui/DataPagination.vue';
 import SearchFilter from '@/components/ui/filters/SearchFilter.vue';
 import TabFilter from '@/components/ui/filters/TabFilter.vue';
+import StatusSwitch from '@/components/ui/StatusSwitch.vue';
+import SuccessAlert from '@/components/ui/SuccessAlert.vue';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableEmpty } from '@/components/ui/table';
+import TableSkeleton from '@/components/ui/TableSkeleton.vue';
 
 // Composables y Tipos
+import { useConfirmDialog } from '@/composables/useConfirmDialog';
 import { useDataFetching } from '@/composables/useDataFetching';
 import { useFlashAlert } from '@/composables/useFlashAlert';
-import { useConfirmDialog } from '@/composables/useConfirmDialog';
+import AppLayout from '@/layouts/AppLayout.vue';
+import { esActivo } from '@/lib/status';
 import type { BreadcrumbItem } from '@/types/navigation';
 
 export interface AnoAcademicoItem {
-    id_ano: number;
-    nombre_ano: string;
-    fecha_inicio_ano?: string | null;
-    fecha_fin_ano?: string | null;
-    status: boolean | number;
+    id_ana: number;
+    nombre_ana: string;
+    fecha_inicio_ana?: string | null;
+    fecha_fin_ana?: string | null;
+    status_id: number;
 }
 
 const props = defineProps<{
@@ -87,25 +86,16 @@ const cambiarPorPagina = (nuevaCantidad: string | number) => {
     changePerPage(String(nuevaCantidad));
 };
 
-const isActivo = (item: AnoAcademicoItem) => {
-    const val = item.status;
-    return val === true || val === 1 || val === '1' || val === 'true';
-};
+const isActivo = (item: AnoAcademicoItem) => esActivo(item);
 
 const handleToggleStatus = async (item: AnoAcademicoItem) => {
     const activo = isActivo(item);
     const accion = activo ? 'desactivar' : 'activar';
     const advertencia = activo ? ' Al desactivarlo, sus lapsos académicos, cohortes y asignaciones de sede también se desactivarán en cascada.' : '';
-    if (await confirmDialog(`¿Está seguro de que desea ${accion} el año académico "${item.nombre_ano}"?${advertencia}`)) {
-        router.patch(route('academico.ano-academico.alternar-estatus', item.id_ano), {}, {
+    if (await confirmDialog(`¿Está seguro de que desea ${accion} el año académico "${item.nombre_ana}"?${advertencia}`)) {
+        router.patch(route('academico.ano-academico.alternar-estatus', item.id_ana), {}, {
             preserveScroll: true,
         });
-    }
-};
-
-const eliminarRegistro = async (ruta: string) => {
-    if (await confirmDialog('¿Estás seguro de que deseas eliminar este registro? Desaparecerá de la lista.')) {
-        router.delete(ruta, { preserveScroll: true });
     }
 };
 </script>
@@ -141,9 +131,9 @@ const eliminarRegistro = async (ruta: string) => {
                 </div>
 
                 <div class="flex items-center gap-2">
-                    <Button as-child size="default" class="shadow-sm">
+                    <Button as-child size="default" class="gap-2 shadow-sm">
                         <Link :href="route('academico.ano-academico.create')">
-                            <Plus class="h-4 w-4 mr-2" />
+                            <Plus class="h-4 w-4" />
                             Nuevo Año Académico
                         </Link>
                     </Button>
@@ -192,11 +182,11 @@ const eliminarRegistro = async (ruta: string) => {
                 <TableSkeleton
                     v-if="isLoading"
                     :columns="[
-                        { key: 'id_ano', label: 'ID' },
-                        { key: 'nombre_ano', label: 'Nombre' },
-                        { key: 'fecha_inicio_ano', label: 'Fecha Inicio' },
-                        { key: 'fecha_fin_ano', label: 'Fecha Fin' },
-                        { key: 'status', label: 'Estatus' },
+                        { key: 'id_ana', label: 'ID' },
+                        { key: 'nombre_ana', label: 'Nombre' },
+                        { key: 'fecha_inicio_ana', label: 'Fecha Inicio' },
+                        { key: 'fecha_fin_ana', label: 'Fecha Fin' },
+                        { key: 'status_id', label: 'Estatus' },
                         { key: 'actions', label: 'Acciones' },
                     ]"
                     :skeleton-rows="5"
@@ -216,76 +206,41 @@ const eliminarRegistro = async (ruta: string) => {
                     <TableBody>
                         <TableRow
                             v-for="item in props.anos?.data || []"
-                            :key="item.id_ano"
+                            :key="item.id_ana"
                             class="transition-all duration-200 hover:bg-slate-50/50 dark:hover:bg-slate-900/30 border-b border-slate-100 dark:border-slate-900 last:border-0"
                         >
                             <TableCell class="py-3.5 px-4 text-center font-mono text-xs text-muted-foreground">
-                                {{ item.id_ano }}
+                                {{ item.id_ana }}
                             </TableCell>
 
                             <TableCell class="py-3.5 px-4 font-semibold text-slate-900 dark:text-slate-100">
-                                {{ item.nombre_ano }}
+                                {{ item.nombre_ana }}
                             </TableCell>
 
                             <TableCell class="py-3.5 px-4 text-muted-foreground">
-                                {{ item.fecha_inicio_ano || 'N/A' }}
+                                {{ item.fecha_inicio_ana || 'N/A' }}
                             </TableCell>
 
                             <TableCell class="py-3.5 px-4 text-muted-foreground">
-                                {{ item.fecha_fin_ano || 'N/A' }}
+                                {{ item.fecha_fin_ana || 'N/A' }}
                             </TableCell>
 
                             <TableCell class="py-3.5 px-4 text-center">
                                 <StatusSwitch
-                                    :status="item.status"
+                                    :status="isActivo(item)"
                                     @toggle="handleToggleStatus(item)"
                                 />
                             </TableCell>
 
                             <TableCell class="py-3.5 px-4 text-center">
-                                <div class="flex items-center justify-center gap-1.5">
-                                    <!-- Botón Ver Detalle -->
-                                    <Button
-                                        as-child
-                                        variant="ghost"
-                                        size="icon"
-                                        class="h-8 w-8 text-slate-600 hover:text-primary dark:text-slate-400"
-                                        title="Ver detalle del año académico"
-                                    >
-                                        <Link :href="route('academico.ano-academico.show', item.id_ano)">
-                                            <Eye class="h-4 w-4" />
-                                        </Link>
-                                    </Button>
-
-                                    <!-- Botón Editar -->
-                                    <Button
-                                        as-child
-                                        variant="ghost"
-                                        size="icon"
-                                        class="h-8 w-8 text-amber-600 hover:text-amber-700 dark:text-amber-400"
-                                        title="Editar año académico"
-                                    >
-                                        <Link :href="route('academico.ano-academico.edit', item.id_ano)">
-                                            <Pencil class="h-4 w-4" />
-                                        </Link>
-                                    </Button>
-
-                                    <!-- Botón Eliminar -->
-                                    <button
-                                        type="button"
-                                        @click="eliminarRegistro(route('academico.ano-academico.destroy', item.id_ano))"
-                                        class="inline-flex items-center justify-center h-8 w-8 rounded-md text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:text-red-300 dark:hover:bg-red-950/50 transition-colors"
-                                        title="Eliminar registro"
-                                    >
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                            <path d="M3 6h18" />
-                                            <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
-                                            <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
-                                            <line x1="10" x2="10" y1="11" y2="17" />
-                                            <line x1="14" x2="14" y1="11" y2="17" />
-                                        </svg>
-                                    </button>
-                                </div>
+                                <CrudActionButtons
+                                    show-route="academico.ano-academico.show"
+                                    edit-route="academico.ano-academico.edit"
+                                    delete-route="academico.ano-academico.destroy"
+                                    :record-id="item.id_ana"
+                                    :record-name="item.nombre_ana"
+                                    confirm-message="¿Estás seguro de que deseas eliminar este registro? Desaparecerá de la lista."
+                                />
                             </TableCell>
                         </TableRow>
 

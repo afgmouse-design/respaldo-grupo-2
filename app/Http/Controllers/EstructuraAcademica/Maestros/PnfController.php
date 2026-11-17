@@ -3,158 +3,155 @@
 namespace App\Http\Controllers\EstructuraAcademica\Maestros;
 
 use App\Http\Controllers\Controller;
-use App\Models\EstructuraAcademica\Maestros\Pnf;
+use App\Models\EstructuraAcademica\Maestros\EscalaMedicion;
+use App\Models\EstructuraAcademica\Maestros\ModalidadEstudio;
+use App\Models\EstructuraAcademica\Maestros\Programa;
+use App\Models\EstructuraAcademica\Maestros\RegimenEstudio;
+use App\Models\EstructuraAcademica\Maestros\TipoPrograma;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
 /**
- * Controlador: Maestro de PNF (Programa Nacional de Formación).
+ * Controlador: Maestro de Programa Académico / PNF (tabla `programa`).
  *
- * Módulo: Estructura Académica / Oferta Académica.
+ * Propósito: Gestiona el ciclo de vida CRUD de los programas de formación (`id_prg`)
+ * sobre el esquema oficial `sogac_mio.sql`, en reemplazo de la tabla legacy `pnf`.
  *
- * Propósito: Gestiona el ciclo de vida CRUD de los PNF mediante arquitectura SPA con Inertia.js.
- * Renderiza estrictamente las vistas bajo EstructuraAcademica/Maestros/Pnf/.
- *
- * Actualización:
- *  - Corrección estricta de rutas de vistas en Inertia::render() hacia 'EstructuraAcademica/Maestros/Pnf/...'.
- *  - Uso de asignación masiva Eloquent Pnf::create() y $pnf->update() con la propiedad $fillable configurada.
+ * Historial:
+ *  - 2026-11-14: Migrado del modelo `Pnf` (`pnf`/`id_pnf`/`status`) a `Programa`
+ *    (`programa`/`id_prg`/`status_id`), añadiendo autorización mediante `ProgramaPolicy`
+ *    y catálogos (`tipo_programa`, `regimen_estudio`, `modalidad_estudio`, `escala_medicion`).
  */
 class PnfController extends Controller
 {
-    /**
-     * Muestra el listado de PNF activos (status_id = 1) con filtros reactivos y paginación.
-     */
     public function index(Request $request): Response
     {
-        $perPage = (int) ($request->input('per_page') ?? $request->input('registros_per_page') ?? 10);
+        $this->authorize('viewAny', Programa::class);
 
-        // Delegación de consulta al modelo con soporte para estado y búsqueda
-        $pnfs = Pnf::obtenerPaginados(
-            $request->only(['search', 'status']),
-            $perPage
-        );
+        $perPage = (int) ($request->input('per_page') ?? $request->input('registros_per_page') ?? 10);
+        $filtros = $request->only(['search', 'status', 'status_id']);
+        $programas = Programa::obtenerPaginados($filtros, $perPage);
 
         return Inertia::render('EstructuraAcademica/Maestros/Pnf/index', [
-            'pnfs'    => $pnfs,
-            'perPage' => $perPage,
-            'filters' => array_merge(
-                $request->only(['search', 'status', 'per_page', 'registros_per_page']),
+            'pnfs'      => $programas,
+            'programas' => $programas,
+            'perPage'   => $perPage,
+            'filters'   => array_merge(
+                $request->only(['search', 'status', 'status_id', 'per_page', 'registros_per_page']),
                 ['per_page' => $perPage, 'registros_per_page' => $perPage]
             ),
         ]);
     }
 
-    /**
-     * Muestra el formulario para crear un nuevo PNF.
-     */
     public function create(): Response
     {
-        return Inertia::render('EstructuraAcademica/Maestros/Pnf/create');
+        $this->authorize('create', Programa::class);
+
+        return Inertia::render('EstructuraAcademica/Maestros/Pnf/create', [
+            'tiposPrograma'      => TipoPrograma::obtenerActivosParaSelect(),
+            'regimenesEstudio'   => RegimenEstudio::obtenerActivosParaSelect(),
+            'modalidadesEstudio' => ModalidadEstudio::obtenerActivosParaSelect(),
+            'escalasMedicion'    => EscalaMedicion::obtenerActivosParaSelect(),
+        ]);
     }
 
-    /**
-     * Almacena un nuevo PNF en la base de datos utilizando Eloquent y $fillable.
-     */
     public function store(Request $request): RedirectResponse
     {
-        $validated = $request->validate([
-            'codigo_pnf' => ['nullable', 'string', 'max:30'],
-            'nombre_pnf' => ['required', 'string', 'max:255'],
-        ]);
+        $this->authorize('create', Programa::class);
+
+        $validated = $this->validarPrograma($request);
 
         try {
-            Pnf::create([
-                'codigo_pnf' => !empty($validated['codigo_pnf']) ? trim($validated['codigo_pnf']) : null,
-                'nombre_pnf' => trim($validated['nombre_pnf']),
-                'status_id'  => 1,
-                'status'     => true,
+            $programa = Programa::create($validated + [
+                'pro_estatus' => 'A',
+                'status_id'   => Programa::STATUS_ACTIVO,
+                'created_id'  => auth()->id(),
             ]);
 
             return redirect()
                 ->route('academico.pnf.index')
-                ->with('success', "El PNF '{$validated['nombre_pnf']}' ha sido registrado exitosamente.");
+                ->with('success', "El programa '{$programa->nombre_prg}' ha sido registrado exitosamente.");
         } catch (\Throwable $e) {
             return redirect()
                 ->back()
                 ->withInput()
-                ->withErrors(['error' => 'Ocurrió un error inesperado al registrar el PNF: ' . $e->getMessage()]);
+                ->withErrors(['error' => 'Ocurrió un error inesperado al registrar el programa: ' . $e->getMessage()]);
         }
     }
 
-    /**
-     * Muestra el detalle de un PNF específico.
-     */
     public function show(int $id): Response
     {
-        $pnf = Pnf::with('mallas')->where('id_pnf', $id)->firstOrFail();
+        $programa = Programa::with([
+            'mallas',
+            'tipoPrograma',
+            'regimenEstudio',
+            'modalidadEstudio',
+            'escalaMedicion',
+        ])->where('id_prg', $id)->firstOrFail();
+
+        $this->authorize('view', $programa);
 
         return Inertia::render('EstructuraAcademica/Maestros/Pnf/show', [
-            'pnf' => $pnf,
+            'pnf'      => $programa,
+            'programa' => $programa,
         ]);
     }
 
-    /**
-     * Muestra el formulario para editar un PNF.
-     */
     public function edit(int $id): Response
     {
-        $pnf = Pnf::where('id_pnf', $id)->firstOrFail();
+        $programa = Programa::where('id_prg', $id)->firstOrFail();
+        $this->authorize('update', $programa);
 
         return Inertia::render('EstructuraAcademica/Maestros/Pnf/edit', [
-            'pnf' => $pnf,
+            'pnf'                => $programa,
+            'programa'           => $programa,
+            'tiposPrograma'      => TipoPrograma::obtenerActivosParaSelect(),
+            'regimenesEstudio'   => RegimenEstudio::obtenerActivosParaSelect(),
+            'modalidadesEstudio' => ModalidadEstudio::obtenerActivosParaSelect(),
+            'escalasMedicion'    => EscalaMedicion::obtenerActivosParaSelect(),
         ]);
     }
 
-    /**
-     * Actualiza los datos de un PNF existente utilizando Eloquent y $fillable.
-     */
     public function update(Request $request, int $id): RedirectResponse
     {
-        $validated = $request->validate([
-            'codigo_pnf' => ['nullable', 'string', 'max:30'],
-            'nombre_pnf' => ['required', 'string', 'max:255'],
-        ]);
+        $programa = Programa::where('id_prg', $id)->firstOrFail();
+        $this->authorize('update', $programa);
+
+        $validated = $this->validarPrograma($request);
 
         try {
-            $pnf = Pnf::where('id_pnf', $id)->firstOrFail();
-
-            $pnf->update([
-                'codigo_pnf' => !empty($validated['codigo_pnf']) ? trim($validated['codigo_pnf']) : null,
-                'nombre_pnf' => trim($validated['nombre_pnf']),
-            ]);
+            $programa->update($validated + ['updated_id' => auth()->id()]);
 
             return redirect()
                 ->route('academico.pnf.index')
-                ->with('success', "El PNF '{$validated['nombre_pnf']}' ha sido actualizado exitosamente.");
+                ->with('success', "El programa '{$programa->nombre_prg}' ha sido actualizado exitosamente.");
         } catch (\Throwable $e) {
             return redirect()
                 ->back()
                 ->withInput()
-                ->withErrors(['error' => 'Ocurrió un error inesperado al actualizar el PNF: ' . $e->getMessage()]);
+                ->withErrors(['error' => 'Ocurrió un error inesperado al actualizar el programa: ' . $e->getMessage()]);
         }
     }
 
-    /**
-     * Alterna el estatus activo/inactivo del PNF. Si se inactiva, desactiva en cascada sus mallas curriculares.
-     */
     public function alternarEstatus(Request $request, int $id): RedirectResponse
     {
+        $programa = Programa::where('id_prg', $id)->firstOrFail();
+        $this->authorize('update', $programa);
+
         try {
-            $pnf = Pnf::where('id_pnf', $id)->firstOrFail();
-            $nuevoEstatus = ($pnf->status_id === 1 || $pnf->status) ? 2 : 1;
-            $nombre = $pnf->nombre_pnf;
+            $nuevoEstatus = Programa::esStatusActivo($programa)
+                ? Programa::STATUS_INACTIVO
+                : Programa::STATUS_ACTIVO;
 
-            Pnf::alternarEstatus($id, $nuevoEstatus);
+            Programa::alternarEstatus($id, $nuevoEstatus, auth()->id());
 
-            $mensaje = ($nuevoEstatus === 1)
-                ? "El programa '{$nombre}' ha sido activado exitosamente."
-                : "El programa '{$nombre}' y sus mallas curriculares asociadas han sido desactivados exitosamente.";
+            $mensaje = $nuevoEstatus === Programa::STATUS_ACTIVO
+                ? "El programa '{$programa->nombre_prg}' ha sido activado exitosamente."
+                : "El programa '{$programa->nombre_prg}' y sus mallas curriculares asociadas han sido desactivados exitosamente.";
 
-            return redirect()
-                ->back()
-                ->with('success', $mensaje);
+            return redirect()->back()->with('success', $mensaje);
         } catch (\Throwable $e) {
             return redirect()
                 ->back()
@@ -163,23 +160,65 @@ class PnfController extends Controller
     }
 
     /**
-     * Realiza la baja lógica del PNF llamando a alternarEstatus($id, 2).
+     * Ejecuta la eliminación lógica en interfaz (`deleted_at` + `status_id = 2`) del programa
+     * y sus mallas curriculares asociadas, conservando el registro en PostgreSQL.
+     *
+     * Historial:
+     * - 2026-11-16: Reemplazada la mera inactivación (`alternarEstatus`) por `eliminarConSoftDelete`.
      */
     public function destroy(int $id): RedirectResponse
     {
-        try {
-            $pnf = Pnf::where('id_pnf', $id)->first();
-            $nombre = $pnf ? $pnf->nombre_pnf : 'PNF';
+        $programa = Programa::where('id_prg', $id)->firstOrFail();
+        $this->authorize('delete', $programa);
 
-            Pnf::alternarEstatus($id, 2);
+        try {
+            $resultado = Programa::eliminarConSoftDelete($id, auth()->id());
 
             return redirect()
                 ->back()
-                ->with('success', "El programa '{$nombre}' y sus mallas curriculares asociadas han sido desactivados exitosamente.");
+                ->with('success', "El programa '{$resultado['nombre']}' y sus mallas curriculares asociadas han sido eliminados correctamente.");
         } catch (\Throwable $e) {
             return redirect()
                 ->back()
-                ->withErrors(['error' => 'No se pudo dar de baja el PNF: ' . $e->getMessage()]);
+                ->withErrors(['error' => 'No se pudo eliminar el programa: ' . $e->getMessage()]);
         }
+    }
+
+    /**
+     * Normaliza alias `*_pnf` hacia `*_prg` y valida los campos de `programa`.
+     *
+     * @return array<string, mixed>
+     */
+    private function validarPrograma(Request $request): array
+    {
+        $request->merge([
+            'codigo_prg' => $request->input('codigo_prg') ?? $request->input('codigo_pnf'),
+            'nombre_prg' => $request->input('nombre_prg') ?? $request->input('nombre_pnf'),
+        ]);
+
+        $validated = $request->validate([
+            'codigo_prg'            => ['nullable', 'string', 'max:30'],
+            'codigo_ministerio_prg' => ['nullable', 'string', 'max:10'],
+            'nombre_prg'            => ['required', 'string', 'max:255'],
+            'siglas_prg'            => ['nullable', 'string', 'max:10'],
+            'titulo_prg'            => ['nullable', 'string', 'max:255'],
+            'intermedia_prg'        => ['nullable', 'string', 'max:1'],
+            'tpg_id'                => ['nullable', 'integer', 'exists:tipo_programa,id_tpg'],
+            'ree_id'                => ['nullable', 'integer', 'exists:regimen_estudio,id_ree'],
+            'moe_id'                => ['nullable', 'integer', 'exists:modalidad_estudio,id_moe'],
+            'esm_id'                => ['nullable', 'integer', 'exists:escala_medicion,id_esm'],
+        ]);
+
+        $validated['nombre_prg'] = trim((string) $validated['nombre_prg']);
+        $validated['codigo_prg'] = ! empty($validated['codigo_prg']) ? trim((string) $validated['codigo_prg']) : null;
+        $validated['codigo_ministerio_prg'] = ! empty($validated['codigo_ministerio_prg'])
+            ? trim((string) $validated['codigo_ministerio_prg'])
+            : null;
+        $validated['siglas_prg'] = ! empty($validated['siglas_prg'])
+            ? mb_strtoupper(trim((string) $validated['siglas_prg']), 'UTF-8')
+            : null;
+        $validated['titulo_prg'] = ! empty($validated['titulo_prg']) ? trim((string) $validated['titulo_prg']) : null;
+
+        return $validated;
     }
 }

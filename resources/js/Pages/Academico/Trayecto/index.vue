@@ -6,45 +6,39 @@
  * y niveles académicos registrados en el SOGAC. Cumple la regla de CERO MODALES mediante
  * navegación directa a páginas dedicadas de creación, detalle y edición.
  *
- * Actualización (Interruptor de Estado - StatusSwitch):
- * Se incorporó el suiche interactivo en la columna de Estatus para activar y desactivar
- * trayectos académicos directamente con confirmación modal.
+ * Historial:
+ *  - 2026-11-14: Alineado a `sogac_mio.sql` (`tla_id`, `tipo_lapso`/`tiposLapso`, `id_tla`,
+ *    `nombre_tla`, `status_id` mediante `@/lib/status`).
+ *  - 2026-11-16: Estandarización de acciones de tabla con <CrudActionButtons /> y encabezado "Nuevo Trayecto".
  */
-import { ref, watch, computed } from 'vue';
 import { Head, Link, router } from '@inertiajs/vue3';
+import { Calendar, GraduationCap, Plus, X } from 'lucide-vue-next';
+import { computed, ref, watch } from 'vue';
 import { route } from 'ziggy-js';
-import AppLayout from '@/layouts/AppLayout.vue';
-import { Button } from '@/components/ui/button';
 import Badge from '@/components/ui/badge/Badge.vue';
-import StatusSwitch from '@/components/ui/StatusSwitch.vue';
-import SuccessAlert from '@/components/ui/SuccessAlert.vue';
-import DataTable from '@/components/ui/DataTable.vue';
+import { Button } from '@/components/ui/button';
+import CrudActionButtons from '@/components/ui/CrudActionButtons.vue';
 import DataPagination from '@/components/ui/DataPagination.vue';
-import TableSkeleton from '@/components/ui/TableSkeleton.vue';
+import DataTable from '@/components/ui/DataTable.vue';
 import SearchFilter from '@/components/ui/filters/SearchFilter.vue';
 import TabFilter from '@/components/ui/filters/TabFilter.vue';
+import StatusSwitch from '@/components/ui/StatusSwitch.vue';
+import SuccessAlert from '@/components/ui/SuccessAlert.vue';
+import TableSkeleton from '@/components/ui/TableSkeleton.vue';
+import { useConfirmDialog } from '@/composables/useConfirmDialog';
 import { useDataFetching } from '@/composables/useDataFetching';
 import { useFlashAlert } from '@/composables/useFlashAlert';
-import { useConfirmDialog } from '@/composables/useConfirmDialog';
+import AppLayout from '@/layouts/AppLayout.vue';
+import { esActivo } from '@/lib/status';
 import type { Column } from '@/types/dataTable';
 import type { BreadcrumbItem } from '@/types/navigation';
-import {
-    GraduationCap,
-    Plus,
-    Eye,
-    Pencil,
-    Trash2,
-    X,
-    Layers,
-    Calendar,
-} from 'lucide-vue-next';
 
-interface TipoPeriodoItem {
-    id_tpd: number;
-    nombre_tpd: string;
-    codigo_tpd?: string;
-    nomenclatura?: string;
-    status?: boolean;
+interface TipoLapsoItem {
+    id_tla: number;
+    nombre_tla: string;
+    codigo_tla?: string;
+    nomenclatura_tla?: string;
+    status_id?: number;
 }
 
 interface TrayectoItem {
@@ -52,10 +46,10 @@ interface TrayectoItem {
     codigo_tra?: string;
     nombre_tra: string;
     numero_orden_tra: number;
-    tpd_id: number;
-    tipo_periodo?: TipoPeriodoItem | null;
-    status: boolean;
-    est_tra?: boolean;
+    tla_id: number;
+    nombre_tla?: string | null;
+    tipo_lapso?: TipoLapsoItem | null;
+    status_id: number;
     created_at?: string;
     updated_at?: string;
 }
@@ -70,16 +64,21 @@ const props = defineProps<{
         from: number;
         to: number;
     };
-    tiposPeriodo: TipoPeriodoItem[];
+    tiposLapso?: TipoLapsoItem[];
+    tiposPeriodo?: TipoLapsoItem[];
     filters: {
         search?: string;
+        tla_id?: string | number;
         tpd_id?: string | number;
+        status_id?: string;
         status?: string;
         per_page?: number | string;
         registros_per_page?: number | string;
     };
     perPage?: number | string;
 }>();
+
+const tiposCatalogo = computed(() => props.tiposLapso ?? props.tiposPeriodo ?? []);
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Dashboard', subtitle: 'Panel Principal', href: route('dashboard') },
@@ -97,7 +96,7 @@ const columns: Column[] = [
     { key: 'nombre_tra', label: 'Nombre del Trayecto / Nivel', align: 'left' },
     { key: 'tipo_periodo', label: 'Modalidad Académica', align: 'left', width: 'w-56' },
     { key: 'status', label: 'Estatus', align: 'center', width: 'w-40' },
-    { key: 'actions', label: 'Acciones Directas', align: 'center', width: 'w-44' },
+    { key: 'actions', label: 'Acciones', align: 'center', width: 'w-36' },
 ];
 
 const {
@@ -134,22 +133,13 @@ watch(
     { deep: true, immediate: true }
 );
 
-const isActivo = (row: any) => {
-    const val = row?.est_tra ?? row?.status;
-    return val === true || val === 1 || val === '1' || val === 'true';
-};
+const isActivo = (row: unknown) => esActivo(row);
 
 const alternarEstatus = async (row: TrayectoItem) => {
     const activo = isActivo(row);
     const accion = activo ? 'desactivar' : 'activar';
     if (await confirmDialog(`¿Está seguro de que desea ${accion} el trayecto "${row.nombre_tra}"?`, `Confirmar ${accion} trayecto`)) {
         router.patch(route('academico.trayecto.toggle_status', row.id_tra), {}, { preserveScroll: true });
-    }
-};
-
-const eliminarRegistro = async (ruta: string) => {
-    if (await confirmDialog('¿Estás seguro de que deseas eliminar este registro? Desaparecerá de la lista.')) {
-        router.delete(ruta);
     }
 };
 </script>
@@ -183,10 +173,10 @@ const eliminarRegistro = async (ruta: string) => {
                 </div>
 
                 <div class="flex items-center gap-2">
-                    <Button as-child size="default" class="shadow-sm">
+                    <Button as-child size="default" class="gap-2 shadow-sm">
                         <Link :href="route('academico.trayecto.create')">
-                            <Plus class="h-4 w-4 mr-2" />
-                            Registrar Trayecto
+                            <Plus class="h-4 w-4" />
+                            Nuevo Trayecto
                         </Link>
                     </Button>
                 </div>
@@ -205,17 +195,17 @@ const eliminarRegistro = async (ruta: string) => {
 
                     <div class="w-full sm:w-64">
                         <select
-                            :value="filterValues.tpd_id ?? 'all'"
+                            :value="filterValues.tla_id ?? filterValues.tpd_id ?? 'all'"
                             class="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                            @change="setFilter('tpd_id', ($event.target as HTMLSelectElement).value)"
+                            @change="setFilter('tla_id', ($event.target as HTMLSelectElement).value)"
                         >
                             <option value="all">Todas las Modalidades</option>
                             <option
-                                v-for="tpd in tiposPeriodo"
-                                :key="tpd.id_tpd"
-                                :value="tpd.id_tpd"
+                                v-for="tl in tiposCatalogo"
+                                :key="tl.id_tla"
+                                :value="tl.id_tla"
                             >
-                                {{ tpd.nombre_tpd }} {{ tpd.nomenclatura ? `(${tpd.nomenclatura})` : '' }}
+                                {{ tl.nombre_tla }} {{ tl.nomenclatura_tla ? `(${tl.nomenclatura_tla})` : '' }}
                             </option>
                         </select>
                     </div>
@@ -223,14 +213,14 @@ const eliminarRegistro = async (ruta: string) => {
 
                 <div class="flex items-center gap-2">
                     <TabFilter
-                        :model-value="filterValues.status ?? 'all'"
+                        :model-value="filterValues.status_id ?? filterValues.status ?? 'all'"
                         :options="[
                             { value: 'all', label: 'Todos' },
-                            { value: 'true', label: 'Activos' },
-                            { value: 'false', label: 'Inactivos' },
+                            { value: '1', label: 'Activos' },
+                            { value: '2', label: 'Inactivos' },
                         ]"
                         default-value="all"
-                        @update:model-value="(val: string) => setFilter('status', val)"
+                        @update:model-value="(val: string) => setFilter('status_id', val)"
                     />
 
                     <Button
@@ -278,7 +268,7 @@ const eliminarRegistro = async (ruta: string) => {
                                 {{ row.nombre_tra }}
                             </span>
                             <Badge
-                                v-if="/semestre|sem/i.test(row.nombre_tra) || row.tipo_periodo?.nomenclatura === 'Semestre'"
+                                v-if="/semestre|sem/i.test(row.nombre_tra) || row.tipo_lapso?.nomenclatura_tla === 'Semestre'"
                                 variant="outline"
                                 class="text-[10px] px-1.5 py-0 bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 font-semibold"
                             >
@@ -287,17 +277,17 @@ const eliminarRegistro = async (ruta: string) => {
                         </div>
                     </template>
 
-                    <!-- SLOT: MODALIDAD / TIPO DE PERÍODO -->
+                    <!-- SLOT: MODALIDAD / TIPO DE LAPSO -->
                     <template #tipo_periodo="{ row }">
                         <div class="flex flex-col gap-0.5">
                             <div class="flex items-center gap-1.5">
                                 <Calendar class="h-3.5 w-3.5 text-muted-foreground" />
                                 <span class="text-sm text-foreground">
-                                    {{ row.tipo_periodo?.nombre_tpd || 'No asignada' }}
+                                    {{ row.tipo_lapso?.nombre_tla || row.nombre_tla || 'No asignada' }}
                                 </span>
                             </div>
-                            <span v-if="row.tipo_periodo?.nomenclatura" class="text-xs text-muted-foreground ml-5 font-medium">
-                                Nomenclatura: {{ row.tipo_periodo?.nomenclatura }}
+                            <span v-if="row.tipo_lapso?.codigo_tla" class="text-xs text-muted-foreground ml-5 font-medium">
+                                Código: {{ row.tipo_lapso.codigo_tla }}
                             </span>
                         </div>
                     </template>
@@ -305,53 +295,22 @@ const eliminarRegistro = async (ruta: string) => {
                     <!-- SLOT: ESTATUS -->
                     <template #status="{ row, item }">
                         <StatusSwitch
-                            :key="`trayecto-${(row || item)?.id_tra}-${((row || item)?.est_tra ?? (row || item)?.status)}`"
-                            :status="(row || item)?.est_tra ?? (row || item)?.status"
+                            :key="`trayecto-${(row || item)?.id_tra}-${(row || item)?.status_id}`"
+                            :status="isActivo(row || item)"
                             @toggle="alternarEstatus(row || item)"
                         />
                     </template>
 
-                    <!-- SLOT: ACCIONES DIRECTAS STANDALONE -->
+                    <!-- SLOT: ACCIONES -->
                     <template #actions="{ row }">
-                        <div class="flex items-center justify-center gap-1.5">
-                            <!-- Ver Detalle -->
-                            <Button
-                                as-child
-                                variant="ghost"
-                                size="icon"
-                                class="h-8 w-8 text-slate-600 hover:text-primary dark:text-slate-400"
-                                title="Ver ficha"
-                            >
-                                <Link :href="route('academico.trayecto.show', row.id_tra)">
-                                    <Eye class="h-4 w-4" />
-                                </Link>
-                            </Button>
-
-                            <!-- Editar -->
-                            <Button
-                                as-child
-                                variant="ghost"
-                                size="icon"
-                                class="h-8 w-8 text-amber-600 hover:text-amber-700 dark:text-amber-400"
-                                title="Editar datos"
-                            >
-                                <Link :href="route('academico.trayecto.edit', row.id_tra)">
-                                    <Pencil class="h-4 w-4" />
-                                </Link>
-                            </Button>
-
-                            <!-- Eliminar -->
-                            <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                class="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
-                                title="Eliminar trayecto"
-                                @click="eliminarRegistro(route('academico.trayecto.destroy', row.id_tra))"
-                            >
-                                <Trash2 class="h-4 w-4" />
-                            </Button>
-                        </div>
+                        <CrudActionButtons
+                            show-route="academico.trayecto.show"
+                            edit-route="academico.trayecto.edit"
+                            delete-route="academico.trayecto.destroy"
+                            :record-id="row.id_tra"
+                            :record-name="row.nombre_tra"
+                            confirm-message="¿Estás seguro de que deseas eliminar este registro? Desaparecerá de la lista."
+                        />
                     </template>
                 </DataTable>
             </div>

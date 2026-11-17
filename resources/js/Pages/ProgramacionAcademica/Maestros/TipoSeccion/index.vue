@@ -4,38 +4,37 @@
  * Propósito: lista, filtra y pagina los tipos de sección desde PostgreSQL (`tipo_seccion`).
  * Actualización: Presenta los tipos de sección en formato de Cuadros (tarjetas) con las opciones
  * de acción (Ver, Editar y Eliminar en rojo) directamente afuera y visibles, junto al StatusSwitch (Activo/Inactivo).
+ * Historial:
+ *  - 2026-11-15: Se elimina referencia a helpers inexistentes (`cupoSugerido`, `esPer` no definido en script) para evitar TypeError en vista Cuadros tras alinear `tipo_seccion` con `esquema_bd2.sql`.
+ *  - 2026-11-16: Estandarización global con <CrudActionButtons /> (cuadros y tabla) en reemplazo de botones custom y PencilLine.
  */
-import { ref } from 'vue';
 import { Head, Link, router } from '@inertiajs/vue3';
-import { route } from 'ziggy-js';
 import {
-    Plus,
-    X,
-    CheckCircle2,
     AlertCircle,
+    CheckCircle2,
+    Info,
     LayoutGrid,
     List,
-    Info,
-    Eye,
-    PencilLine,
-    Trash2,
+    Plus,
+    X,
 } from 'lucide-vue-next';
-
-import AppLayout from '@/layouts/AppLayout.vue';
-import DataTable from '@/components/ui/DataTable.vue';
-import DataPagination from '@/components/ui/DataPagination.vue';
-import SuccessAlert from '@/components/ui/SuccessAlert.vue';
-import StatusSwitch from '@/components/ui/StatusSwitch.vue';
-import { Button } from '@/components/ui/button';
+import { ref } from 'vue';
+import { route } from 'ziggy-js';
 import Badge from '@/components/ui/badge/Badge.vue';
-import TableSkeleton from '@/components/ui/TableSkeleton.vue';
-
+import { Button } from '@/components/ui/button';
+import CrudActionButtons from '@/components/ui/CrudActionButtons.vue';
+import DataPagination from '@/components/ui/DataPagination.vue';
+import DataTable from '@/components/ui/DataTable.vue';
 import SearchFilter from '@/components/ui/filters/SearchFilter.vue';
 import TabFilter from '@/components/ui/filters/TabFilter.vue';
-
+import StatusSwitch from '@/components/ui/StatusSwitch.vue';
+import SuccessAlert from '@/components/ui/SuccessAlert.vue';
+import TableSkeleton from '@/components/ui/TableSkeleton.vue';
+import { useConfirmDialog } from '@/composables/useConfirmDialog';
 import { useDataFetching } from '@/composables/useDataFetching';
 import { useFlashAlert } from '@/composables/useFlashAlert';
-import { useConfirmDialog } from '@/composables/useConfirmDialog';
+import AppLayout from '@/layouts/AppLayout.vue';
+import { esActivo } from '@/lib/status';
 import type { Column } from '@/types/dataTable';
 
 const props = defineProps<{
@@ -54,8 +53,8 @@ const columns: Column[] = [
     { key: 'codigo_tis', label: 'Código', align: 'center', width: 'w-32' },
     { key: 'nombre_tis', label: 'Nombre del Tipo de Sección', align: 'left' },
     { key: 'descripcion_tis', label: 'Descripción', align: 'left' },
-    { key: 'status', label: 'Status', align: 'center', width: 'w-40' },
-    { key: 'actions', label: 'Acciones', align: 'center', width: 'w-64' },
+    { key: 'status', label: 'Estatus', align: 'center', width: 'w-40' },
+    { key: 'actions', label: 'Acciones', align: 'center', width: 'w-36' },
 ];
 
 const {
@@ -70,35 +69,18 @@ const {
     setFilter,
     fetchData,
 } = useDataFetching(
-    props.tiposSeccion ?? { data: [], total: 0, per_page: 10, current_page: 1, last_page: 1, from: 0, to: 0 },
+    () => props.tiposSeccion ?? { data: [], total: 0, per_page: 10, current_page: 1, last_page: 1, from: 0, to: 0 },
     props.filters ?? {},
     { routeName: 'tipo_seccion.index', listRouteName: 'tiposSeccion', perPageDefault: 10 }
 );
 
-const esActivo = (v: any) => v === true || v === 1 || v === '1' || v === 't';
-
-const esPer = (row: any) => {
-    const cod = String(row.codigo_tis || '').toUpperCase();
-    const nom = String(row.nombre_tis || '').toUpperCase();
-    return cod.includes('PER') || nom.includes('PER') || nom.includes('RECUPERACIÓN');
-};
-
-const cupoSugerido = (row: any) => (esPer(row) ? 20 : 35);
+const esPer = (row: any): boolean =>
+    /\bPER\b/i.test(`${row?.codigo_tis ?? ''} ${row?.nombre_tis ?? ''}`);
 
 const alternarEstatus = async (row: any) => {
-    const accion = esActivo(row.status) ? 'desactivar' : 'activar';
+    const accion = esActivo(row) ? 'desactivar' : 'activar';
     if (await confirmDialog(`¿Está seguro de que desea ${accion} el tipo de sección "${row.nombre_tis}"?`, `Confirmar ${accion}`)) {
         router.delete(route('tipo_seccion.destroy', row.id), {
-            preserveScroll: true,
-            onSuccess: () => fetchData(),
-        });
-    }
-};
-
-const eliminarRegistro = async (row: any) => {
-    if (await confirmDialog(`¿Está seguro de que desea eliminar el tipo de sección "${row.nombre_tis}"?`, 'Confirmar eliminación')) {
-        router.delete(route('tipo_seccion.destroy', row.id), {
-            data: { eliminar: 1 },
             preserveScroll: true,
             onSuccess: () => fetchData(),
         });
@@ -113,8 +95,34 @@ const eliminarRegistro = async (row: any) => {
         <div class="w-full px-4 sm:px-6 lg:px-8 py-6 space-y-6">
             <SuccessAlert :show="showSuccessAlert" :id="itemId" :message="message" entity="tipo_seccion" @close="closeAlert" />
 
-            <!-- BARRA SUPERIOR DE BÚSQUEDA, FILTROS Y BOTÓN NUEVO -->
-            <div class="flex flex-col lg:flex-row justify-between items-stretch md:items-center gap-2 pt-2 mb-4">
+            <!-- ENCABEZADO ESTÁNDAR -->
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b pb-5 dark:border-slate-800">
+                <div class="space-y-1">
+                    <div class="flex items-center gap-2">
+                        <div class="p-2 bg-primary/10 rounded-lg text-primary">
+                            <LayoutGrid class="h-6 w-6" />
+                        </div>
+                        <h1 class="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
+                            Tipos de Sección
+                        </h1>
+                    </div>
+                    <p class="text-sm text-muted-foreground">
+                        Catálogo de modalidades de sección académica (Regular, PER, Repitiente, Dirigido, Intensivo).
+                    </p>
+                </div>
+
+                <div class="flex items-center gap-2">
+                    <Button as-child size="default" class="gap-2 shadow-sm">
+                        <Link :href="route('tipo_seccion.create')">
+                            <Plus class="h-4 w-4" />
+                            Nuevo Tipo de Sección
+                        </Link>
+                    </Button>
+                </div>
+            </div>
+
+            <!-- BARRA SUPERIOR DE BÚSQUEDA Y FILTROS -->
+            <div class="flex flex-col lg:flex-row justify-between items-stretch md:items-center gap-2">
                 <div class="flex items-center gap-3 w-full">
                     <SearchFilter
                         class="w-full flex-1"
@@ -170,11 +178,6 @@ const eliminarRegistro = async (row: any) => {
                         <X class="h-4 w-4" />
                     </Button>
 
-                    <Button as-child size="sm" class="h-9 flex-1 sm:flex-none">
-                        <Link :href="route('tipo_seccion.create')">
-                            <Plus class="h-4 w-4 mr-1" /> Nuevo
-                        </Link>
-                    </Button>
                 </div>
             </div>
 
@@ -196,17 +199,14 @@ const eliminarRegistro = async (row: any) => {
                         class="bg-card border rounded-xl p-5 shadow-xs flex flex-col justify-between hover:border-primary/50 transition-all"
                     >
                         <div>
-                            <!-- CABECERA DEL CUADRO: CÓDIGO, CUPO SUGERIDO Y SWITCH ACTIVO -->
+                            <!-- CABECERA DEL CUADRO: CÓDIGO Y SWITCH ACTIVO -->
                             <div class="flex items-center justify-between gap-2 mb-3">
                                 <div class="flex items-center gap-2">
                                     <Badge variant="secondary" class="font-mono text-xs font-bold">
                                         {{ row.codigo_tis }}
                                     </Badge>
-                                    <Badge variant="outline" class="text-xs">
-                                        Sugerido: {{ cupoSugerido(row) }} cupos
-                                    </Badge>
                                 </div>
-                                <StatusSwitch :status="row.status" @toggle="alternarEstatus(row)" />
+                                <StatusSwitch :status="esActivo(row) ? 1 : 0" @toggle="alternarEstatus(row)" />
                             </div>
 
                             <h2 class="text-lg font-bold text-slate-900 dark:text-slate-100 mb-2">
@@ -229,32 +229,17 @@ const eliminarRegistro = async (row: any) => {
                             </div>
                         </div>
 
-                        <!-- PIE DEL CUADRO: OPCIONES AFUERA (VER, EDITAR, ELIMINAR EN ROJO) -->
-                        <div class="pt-3 border-t flex items-center justify-end gap-2">
-                            <Button variant="outline" size="sm" as-child class="h-8 px-2.5 text-xs gap-1.5">
-                                <Link :href="route('tipo_seccion.show', row.id)">
-                                    <Eye class="h-3.5 w-3.5" />
-                                    <span>Ver</span>
-                                </Link>
-                            </Button>
-
-                            <Button variant="outline" size="sm" as-child class="h-8 px-2.5 text-xs gap-1.5">
-                                <Link :href="route('tipo_seccion.edit', row.id)">
-                                    <PencilLine class="h-3.5 w-3.5" />
-                                    <span>Editar</span>
-                                </Link>
-                            </Button>
-
-                            <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                class="h-8 px-2.5 text-xs gap-1.5 border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 dark:border-red-900/50 dark:text-red-400 dark:hover:bg-red-950/50 cursor-pointer"
-                                @click="eliminarRegistro(row)"
-                            >
-                                <Trash2 class="h-3.5 w-3.5" />
-                                <span>Eliminar</span>
-                            </Button>
+                        <!-- PIE DEL CUADRO: ACCIONES ESTÁNDAR -->
+                        <div class="pt-3 border-t flex items-center justify-end">
+                            <CrudActionButtons
+                                show-route="tipo_seccion.show"
+                                edit-route="tipo_seccion.edit"
+                                delete-route="tipo_seccion.destroy"
+                                :record-id="row.id_tis ?? row.id"
+                                :record-name="row.nombre_tis"
+                                :delete-payload="{ eliminar: 1 }"
+                                @deleted="fetchData()"
+                            />
                         </div>
                     </div>
                 </div>
@@ -281,36 +266,19 @@ const eliminarRegistro = async (row: any) => {
                             {{ value }}
                         </span>
                     </template>
-                    <template #status="{ row, value }">
-                        <StatusSwitch :status="value ?? row?.status" @toggle="alternarEstatus(row)" />
+                    <template #status="{ row }">
+                        <StatusSwitch :status="esActivo(row) ? 1 : 0" @toggle="alternarEstatus(row)" />
                     </template>
                     <template #actions="{ row }">
-                        <div class="flex items-center justify-center gap-1.5">
-                            <Button variant="outline" size="sm" as-child class="h-8 px-2.5 text-xs gap-1">
-                                <Link :href="route('tipo_seccion.show', row.id)">
-                                    <Eye class="h-3.5 w-3.5" />
-                                    <span>Ver</span>
-                                </Link>
-                            </Button>
-
-                            <Button variant="outline" size="sm" as-child class="h-8 px-2.5 text-xs gap-1">
-                                <Link :href="route('tipo_seccion.edit', row.id)">
-                                    <PencilLine class="h-3.5 w-3.5" />
-                                    <span>Editar</span>
-                                </Link>
-                            </Button>
-
-                            <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                class="h-8 px-2.5 text-xs gap-1 border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 dark:border-red-900/50 dark:text-red-400 dark:hover:bg-red-950/50 cursor-pointer"
-                                @click="eliminarRegistro(row)"
-                            >
-                                <Trash2 class="h-3.5 w-3.5" />
-                                <span>Eliminar</span>
-                            </Button>
-                        </div>
+                        <CrudActionButtons
+                            show-route="tipo_seccion.show"
+                            edit-route="tipo_seccion.edit"
+                            delete-route="tipo_seccion.destroy"
+                            :record-id="row.id_tis ?? row.id"
+                            :record-name="row.nombre_tis"
+                            :delete-payload="{ eliminar: 1 }"
+                            @deleted="fetchData()"
+                        />
                     </template>
                 </DataTable>
             </div>

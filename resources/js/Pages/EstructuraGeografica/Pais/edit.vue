@@ -4,29 +4,29 @@
  *
  * Propósito: Página independiente con formulario precargado para actualizar
  * la información de un país existente en el SOGAC. Cumple estrictamente la regla de CERO MODALES.
+ *
+ * Historial:
+ * - 2026-11-16: Estandarización del pie de formulario con <CrudFormFooter />.
  */
 import { Head, Link, useForm } from '@inertiajs/vue3';
+import { AlertCircle, ArrowLeft, Eye, Globe } from 'lucide-vue-next';
 import { route } from 'ziggy-js';
-import AppLayout from '@/layouts/AppLayout.vue';
+import Badge from '@/components/ui/badge/Badge.vue';
 import { Button } from '@/components/ui/button';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
+import CrudFormFooter from '@/components/ui/CrudFormFooter.vue';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import Badge from '@/components/ui/badge/Badge.vue';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
-import type { BreadcrumbItem } from '@/types/navigation';
+import AppLayout from '@/layouts/AppLayout.vue';
+import { esActivo, resolverStatusId } from '@/lib/status';
 import { formatNombre } from '@/lib/utils';
-import {
-    Globe,
-    ArrowLeft,
-    Save,
-    AlertCircle,
-    Eye,
-} from 'lucide-vue-next';
+import type { BreadcrumbItem } from '@/types/navigation';
 
 interface PaisModel {
     id_pai: number;
     nombre_pai: string;
-    status: boolean;
+    status_id?: number;
+    status?: boolean | number;
     created_at?: string;
     updated_at?: string;
 }
@@ -44,7 +44,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 const form = useForm({
     nombre_pai: props.pais.nombre_pai,
-    status: props.pais.status,
+    status_id: resolverStatusId(props.pais),
 });
 
 const submit = () => {
@@ -71,8 +71,8 @@ const submit = () => {
                         <h1 class="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
                             Editar País: {{ props.pais.nombre_pai }}
                         </h1>
-                        <Badge :variant="props.pais.status ? 'successCustom' : 'destructiveCustom'" class="ml-2">
-                            {{ props.pais.status ? 'Activo' : 'Inactivo' }}
+                        <Badge :variant="esActivo(props.pais) ? 'successCustom' : 'destructiveCustom'" class="ml-2">
+                            {{ esActivo(props.pais) ? 'Activo' : 'Inactivo' }}
                         </Badge>
                     </div>
                     <p class="text-sm text-muted-foreground ml-10">
@@ -137,7 +137,7 @@ const submit = () => {
                             </p>
                         </div>
 
-                        <!-- CAMPO: ESTATUS -->
+                        <!-- CAMPO: ESTATUS (`status_id`) -->
                         <div class="space-y-2 pt-2 border-t dark:border-slate-800">
                             <Label for="status" class="text-sm font-semibold text-slate-700 dark:text-slate-300">
                                 Estatus Operativo
@@ -147,12 +147,13 @@ const submit = () => {
                                     <input
                                         id="status"
                                         type="checkbox"
-                                        v-model="form.status"
+                                        :checked="form.status_id === 1"
+                                        @change="form.status_id = ($event.target as HTMLInputElement).checked ? 1 : 2"
                                         class="sr-only peer"
                                     />
                                     <div class="w-11 h-6 bg-slate-200 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600 dark:bg-slate-700"></div>
                                     <span class="ml-3 text-sm font-medium text-slate-700 dark:text-slate-300">
-                                        {{ form.status ? 'Registro Activo' : 'Registro Inactivo' }}
+                                        {{ form.status_id === 1 ? 'Registro Activo' : 'Registro Inactivo' }}
                                     </span>
                                 </label>
                             </div>
@@ -162,17 +163,12 @@ const submit = () => {
                         </div>
                     </CardContent>
 
-                    <CardFooter class="flex items-center justify-end gap-3 border-t bg-muted/20 px-6 py-4">
-                        <Button as-child variant="outline">
-                            <Link :href="route('geografia.pais.index')">
-                                Cancelar
-                            </Link>
-                        </Button>
-
-                        <Button type="submit" :disabled="form.processing" class="shadow-xs">
-                            <Save class="h-4 w-4 mr-2" />
-                            {{ form.processing ? 'Guardando...' : 'Actualizar' }}
-                        </Button>
+                    <CardFooter class="border-t border-slate-100 bg-muted/20 px-6 py-4 dark:border-slate-800/60">
+                        <CrudFormFooter
+                            :cancel-href="route('geografia.pais.index')"
+                            :is-edit="true"
+                            :processing="form.processing"
+                        />
                     </CardFooter>
                 </form>
             </Card>

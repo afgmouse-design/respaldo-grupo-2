@@ -3,23 +3,37 @@
  * Vista Standalone: Detalle de Cohorte (Programación Académica).
  *
  * Propósito: Ficha técnica de consulta y detalle de una cohorte académica.
+ *
+ * Historial:
+ * - 2026-11-16: Ordenado de importaciones según estándar ESLint del proyecto.
  */
 import { Head, Link } from '@inertiajs/vue3';
+import { ArrowLeft, Calendar, CheckCircle2, GraduationCap, Pencil, XCircle } from 'lucide-vue-next';
 import { route } from 'ziggy-js';
-import AppLayout from '@/layouts/AppLayout.vue';
-import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
+import AppLayout from '@/layouts/AppLayout.vue';
+import { esActivo } from '@/lib/status';
 import type { BreadcrumbItem } from '@/types/navigation';
-import { ArrowLeft, Pencil, GraduationCap, CheckCircle2, XCircle, Calendar } from 'lucide-vue-next';
 
 const props = defineProps<{
     cohorte: {
         id_coh: number;
         nombre_coh: string;
         fecha_inicio_coh: string;
+        status_id?: number;
         status?: boolean;
-        lapso_academico?: { id_la: number; nombre_la: string; fecha_inicio_la: string; fecha_fin_la: string };
+        lapso_academico?: {
+            id_laa?: number;
+            id_la?: number;
+            nombre_laa?: string;
+            nombre_la?: string;
+            fecha_inicio_laa?: string;
+            fecha_inicio_la?: string;
+            fecha_fin_laa?: string;
+            fecha_fin_la?: string;
+        };
     };
 }>();
 
@@ -70,10 +84,10 @@ const breadcrumbs: BreadcrumbItem[] = [
                             <GraduationCap class="h-5 w-5 text-primary" />
                             <CardTitle class="text-lg font-semibold">{{ cohorte.nombre_coh }}</CardTitle>
                         </div>
-                        <Badge :variant="cohorte.status ? 'default' : 'secondary'" class="gap-1.5 py-1 px-3">
-                            <CheckCircle2 v-if="cohorte.status" class="h-3.5 w-3.5" />
+                        <Badge :variant="esActivo(cohorte) ? 'default' : 'secondary'" class="gap-1.5 py-1 px-3">
+                            <CheckCircle2 v-if="esActivo(cohorte)" class="h-3.5 w-3.5" />
                             <XCircle v-else class="h-3.5 w-3.5" />
-                            {{ cohorte.status ? 'Activa' : 'Inactiva' }}
+                            {{ esActivo(cohorte) ? 'Activa' : 'Inactiva' }}
                         </Badge>
                     </div>
                     <CardDescription>Identificador interno: #{{ cohorte.id_coh }}</CardDescription>
@@ -99,9 +113,9 @@ const breadcrumbs: BreadcrumbItem[] = [
                         <div class="md:col-span-2">
                             <span class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Lapso Académico Vinculado</span>
                             <p class="text-base font-medium text-slate-900 dark:text-slate-100 mt-1">
-                                {{ cohorte.lapso_academico?.nombre_la || 'No asignado' }}
+                                {{ cohorte.lapso_academico?.nombre_laa || cohorte.lapso_academico?.nombre_la || 'No asignado' }}
                                 <span v-if="cohorte.lapso_academico" class="text-xs text-muted-foreground ml-2">
-                                    ({{ cohorte.lapso_academico.fecha_inicio_la }} al {{ cohorte.lapso_academico.fecha_fin_la }})
+                                    ({{ cohorte.lapso_academico.fecha_inicio_laa || cohorte.lapso_academico.fecha_inicio_la }} al {{ cohorte.lapso_academico.fecha_fin_laa || cohorte.lapso_academico.fecha_fin_la }})
                                 </span>
                             </p>
                         </div>

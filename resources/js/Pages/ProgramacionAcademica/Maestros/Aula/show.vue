@@ -10,6 +10,7 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
+import { esActivo } from '@/lib/status';
 import type { BreadcrumbItem } from '@/types/navigation';
 import { ArrowLeft, Pencil, School, CheckCircle2, XCircle, MapPin, Users } from 'lucide-vue-next';
 
@@ -19,6 +20,7 @@ const props = defineProps<{
         codigo_aula_aul: string;
         capacidad_maxima_aul: number;
         tipo_espacio_aul?: string | null;
+        status_id?: number;
         status?: boolean;
         sede?: { id_sed: number; nombre_sed: string };
         tipo_aula?: { id_tia: number; nombre_tia: string };
@@ -72,10 +74,10 @@ const breadcrumbs: BreadcrumbItem[] = [
                             <School class="h-5 w-5 text-primary" />
                             <CardTitle class="text-lg font-semibold">Aula {{ aula.codigo_aula_aul }}</CardTitle>
                         </div>
-                        <Badge :variant="aula.status ? 'default' : 'secondary'" class="gap-1.5 py-1 px-3">
-                            <CheckCircle2 v-if="aula.status" class="h-3.5 w-3.5" />
+                        <Badge :variant="esActivo(aula) ? 'default' : 'secondary'" class="gap-1.5 py-1 px-3">
+                            <CheckCircle2 v-if="esActivo(aula)" class="h-3.5 w-3.5" />
                             <XCircle v-else class="h-3.5 w-3.5" />
-                            {{ aula.status ? 'Habilitada' : 'Inactiva' }}
+                            {{ esActivo(aula) ? 'Habilitada' : 'Inactiva' }}
                         </Badge>
                     </div>
                     <CardDescription>Identificador interno: #{{ aula.id_aul }}</CardDescription>

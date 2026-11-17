@@ -7,32 +7,26 @@
  *
  * Historial de Modificaciones:
  * - [Actualización]: Integración del componente `<StatusSwitch>` en el encabezado del país y en la tabla de estados subordinados.
+ * - 2026-11-16: Uso de `<CrudActionButtons />` en acciones de la tabla de estados subordinados.
  */
 import { Head, Link, router } from '@inertiajs/vue3';
+import { ArrowLeft, Calendar, Hash, Layers, MapPin, Pencil, Plus, Power } from 'lucide-vue-next';
 import { route } from 'ziggy-js';
-import AppLayout from '@/layouts/AppLayout.vue';
 import { Button } from '@/components/ui/button';
-import StatusSwitch from '@/components/ui/StatusSwitch.vue';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
+import CrudActionButtons from '@/components/ui/CrudActionButtons.vue';
+import StatusSwitch from '@/components/ui/StatusSwitch.vue';
 import { useConfirmDialog } from '@/composables/useConfirmDialog';
+import AppLayout from '@/layouts/AppLayout.vue';
+import { esActivo, resolverStatusId } from '@/lib/status';
 import type { BreadcrumbItem } from '@/types/navigation';
-import {
-    Globe,
-    ArrowLeft,
-    Pencil,
-    Power,
-    MapPin,
-    Plus,
-    Calendar,
-    Hash,
-    Layers,
-    Eye,
-} from 'lucide-vue-next';
 
 interface EstadoSubordinado {
     id_esd: number;
     nombre_esd: string;
-    status: boolean;
+    iso_esd?: string | null;
+    status_id?: number;
+    status?: boolean | number;
     municipios_count?: number;
     created_at?: string;
 }
@@ -40,7 +34,8 @@ interface EstadoSubordinado {
 interface PaisModel {
     id_pai: number;
     nombre_pai: string;
-    status: boolean;
+    status_id?: number;
+    status?: boolean | number;
     created_at?: string;
     updated_at?: string;
     estados?: EstadoSubordinado[];
@@ -71,14 +66,14 @@ const formatDate = (isoString?: string) => {
 };
 
 const toggleEstatus = async () => {
-    const accion = props.pais.status ? 'desactivar' : 'activar';
+    const accion = esActivo(props.pais) ? 'desactivar' : 'activar';
     if (await confirmDialog(`¿Está seguro de que desea ${accion} el país "${props.pais.nombre_pai}"?`)) {
-        router.delete(route('geografia.pais.destroy', props.pais.id_pai));
+        router.patch(route('geografia.pais.status', props.pais.id_pai), {}, { preserveScroll: true });
     }
 };
 
 const toggleEstatusEstado = async (estado: EstadoSubordinado) => {
-    const accion = estado.status ? 'desactivar' : 'activar';
+    const accion = esActivo(estado) ? 'desactivar' : 'activar';
     if (await confirmDialog(`¿Está seguro de que desea ${accion} el estado "${estado.nombre_esd}"?`)) {
         router.patch(route('geografia.estado.status', estado.id_esd), {}, { preserveScroll: true });
     }
@@ -101,7 +96,7 @@ const toggleEstatusEstado = async (estado: EstadoSubordinado) => {
                         </Button>
                         <h1 class="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100 flex items-center gap-3">
                             <span>{{ props.pais.nombre_pai }}</span>
-                            <StatusSwitch :status="props.pais.status" @toggle="toggleEstatus" />
+                            <StatusSwitch :status="resolverStatusId(props.pais)" @toggle="toggleEstatus" />
                         </h1>
                     </div>
                     <p class="text-sm text-muted-foreground ml-10">
@@ -120,11 +115,11 @@ const toggleEstatusEstado = async (estado: EstadoSubordinado) => {
                     <Button
                         variant="outline"
                         size="sm"
-                        :class="props.pais.status ? 'text-red-600 hover:text-red-700' : 'text-emerald-600 hover:text-emerald-700'"
+                        :class="esActivo(props.pais) ? 'text-red-600 hover:text-red-700' : 'text-emerald-600 hover:text-emerald-700'"
                         @click="toggleEstatus"
                     >
                         <Power class="h-4 w-4 mr-2" />
-                        {{ props.pais.status ? 'Desactivar' : 'Activar' }}
+                        {{ esActivo(props.pais) ? 'Desactivar' : 'Activar' }}
                     </Button>
                 </div>
             </div>
@@ -241,22 +236,16 @@ const toggleEstatusEstado = async (estado: EstadoSubordinado) => {
                                     </td>
                                     <td class="px-6 py-4 text-center">
                                         <div class="flex items-center justify-center">
-                                            <StatusSwitch :status="estado.status" @toggle="toggleEstatusEstado(estado)" />
+                                            <StatusSwitch :status="resolverStatusId(estado)" @toggle="toggleEstatusEstado(estado)" />
                                         </div>
                                     </td>
                                     <td class="px-6 py-4 text-center">
-                                        <div class="flex items-center justify-center gap-2">
-                                            <Button as-child variant="ghost" size="icon" class="h-8 w-8 text-slate-600 hover:text-primary" title="Ver ficha del estado">
-                                                <Link :href="route('geografia.estado.show', estado.id_esd)">
-                                                    <Eye class="h-4 w-4" />
-                                                </Link>
-                                            </Button>
-                                            <Button as-child variant="ghost" size="icon" class="h-8 w-8 text-amber-600 hover:text-amber-700" title="Editar estado">
-                                                <Link :href="route('geografia.estado.edit', estado.id_esd)">
-                                                    <Pencil class="h-4 w-4" />
-                                                </Link>
-                                            </Button>
-                                        </div>
+                                        <CrudActionButtons
+                                            show-route="geografia.estado.show"
+                                            edit-route="geografia.estado.edit"
+                                            :record-id="estado.id_esd"
+                                            :can-delete="false"
+                                        />
                                     </td>
                                 </tr>
                             </tbody>

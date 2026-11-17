@@ -1,35 +1,62 @@
 <script setup lang="ts">
 /**
- * Vista Standalone: Creación de PNF (Módulo: Estructura Académica / Oferta Académica).
+ * Vista Standalone: Creación de Programa / PNF (Módulo: Estructura Académica / Oferta Académica).
  *
- * Propósito: Permite registrar un nuevo Programa Nacional de Formación mediante useForm de Inertia,
- * siguiendo la arquitectura de diseño y componentes de Trayecto / Sede.
+ * Propósito: Permite registrar un nuevo programa académico en `programa` enviando los campos
+ * oficiales (`codigo_prg`, `codigo_ministerio_prg`, `nombre_prg`, `siglas_prg`, `titulo_prg`,
+ * `intermedia_prg`, `tpg_id`, `ree_id`, `moe_id`, `esm_id`).
+ *
+ * Historial:
+ *  - 2026-11-14: Alineado a `sogac_mio.sql` (`programa` en lugar de `pnf`) y al controlador `PnfController`.
+ *  - 2026-11-16: Estandarización del pie de formulario con <CrudFormFooter />.
  */
 import { Head, Link, useForm } from '@inertiajs/vue3';
+import { AlertCircle, ArrowLeft, GraduationCap } from 'lucide-vue-next';
 import { route } from 'ziggy-js';
-import AppLayout from '@/layouts/AppLayout.vue';
 import { Button } from '@/components/ui/button';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
+import CrudFormFooter from '@/components/ui/CrudFormFooter.vue';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
+import AppLayout from '@/layouts/AppLayout.vue';
 import type { BreadcrumbItem } from '@/types/navigation';
-import {
-    GraduationCap,
-    ArrowLeft,
-    Save,
-    AlertCircle,
-} from 'lucide-vue-next';
+
+interface SelectItem {
+    id_tpg?: number;
+    nombre_tpg?: string;
+    id_ree?: number;
+    nombre_ree?: string;
+    id_moe?: number;
+    nombre_moe?: string;
+    id_esm?: number;
+    nombre_esm?: string;
+}
+
+defineProps<{
+    tiposPrograma?: SelectItem[];
+    regimenesEstudio?: SelectItem[];
+    modalidadesEstudio?: SelectItem[];
+    escalasMedicion?: SelectItem[];
+}>();
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Dashboard', subtitle: 'Panel Principal', href: route('dashboard') },
     { title: 'Estructura Académica', subtitle: 'Currículo', href: '#' },
-    { title: 'PNF', subtitle: 'Oferta Académica', href: route('academico.pnf.index') },
-    { title: 'Registrar PNF', subtitle: 'Nuevo Registro', href: route('academico.pnf.create') },
+    { title: 'PNF / Programas', subtitle: 'Oferta Académica', href: route('academico.pnf.index') },
+    { title: 'Registrar Programa', subtitle: 'Nuevo Registro', href: route('academico.pnf.create') },
 ];
 
 const form = useForm({
-    codigo_pnf: '',
-    nombre_pnf: '',
+    codigo_prg: '',
+    codigo_ministerio_prg: '',
+    nombre_prg: '',
+    siglas_prg: '',
+    titulo_prg: '',
+    intermedia_prg: 'N',
+    tpg_id: '' as string | number,
+    ree_id: '' as string | number,
+    moe_id: '' as string | number,
+    esm_id: '' as string | number,
 });
 
 const submit = () => {
@@ -41,7 +68,7 @@ const submit = () => {
 
 <template>
     <AppLayout :breadcrumbs="breadcrumbs">
-        <Head title="Registrar PNF - Estructura Académica" />
+        <Head title="Registrar Programa / PNF - Estructura Académica" />
 
         <div class="w-full px-4 sm:px-6 lg:px-8 py-6 space-y-6">
             <!-- ENCABEZADO -->
@@ -54,11 +81,11 @@ const submit = () => {
                             </Link>
                         </Button>
                         <h1 class="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
-                            Registrar Nuevo PNF
+                            Registrar Nuevo Programa / PNF
                         </h1>
                     </div>
                     <p class="text-sm text-muted-foreground ml-10">
-                        Defina los datos principales del Programa Nacional de Formación a aperturar en la institución.
+                        Defina los datos oficiales del Programa Nacional de Formación a ofertar en la institución.
                     </p>
                 </div>
             </div>
@@ -68,7 +95,7 @@ const submit = () => {
                 <CardHeader>
                     <div class="flex items-center gap-2">
                         <GraduationCap class="h-5 w-5 text-primary" />
-                        <CardTitle class="text-lg">Información del Programa Nacional de Formación</CardTitle>
+                        <CardTitle class="text-lg">Información del Programa Académico</CardTitle>
                     </div>
                     <CardDescription>
                         Complete los datos de la oferta académica. Los campos con (*) son obligatorios.
@@ -77,58 +104,161 @@ const submit = () => {
 
                 <form @submit.prevent="submit">
                     <CardContent class="space-y-6">
-                        <!-- ERROR GLOBAL -->
                         <div v-if="form.errors.error" class="p-3 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-lg flex items-center gap-2">
                             <AlertCircle class="h-4 w-4 shrink-0" />
                             <span>{{ form.errors.error }}</span>
                         </div>
 
-                        <!-- CÓDIGO DEL PNF -->
-                        <div class="space-y-2">
-                            <Label for="codigo_pnf" class="text-sm font-medium">
-                                Código del PNF (Opcional)
-                            </Label>
-                            <Input
-                                id="codigo_pnf"
-                                v-model="form.codigo_pnf"
-                                type="text"
-                                placeholder="Ej: PNF-INF, INF-01, 1024"
-                                :class="{ 'border-destructive': form.errors.codigo_pnf }"
-                            />
-                            <p v-if="form.errors.codigo_pnf" class="text-xs text-destructive">
-                                {{ form.errors.codigo_pnf }}
-                            </p>
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div class="space-y-2">
+                                <Label for="codigo_prg" class="text-sm font-medium">Código Interno</Label>
+                                <Input
+                                    id="codigo_prg"
+                                    v-model="form.codigo_prg"
+                                    type="text"
+                                    placeholder="Ej: PNF-INF"
+                                    :class="{ 'border-destructive': form.errors.codigo_prg }"
+                                />
+                                <p v-if="form.errors.codigo_prg" class="text-xs text-destructive">{{ form.errors.codigo_prg }}</p>
+                            </div>
+
+                            <div class="space-y-2">
+                                <Label for="codigo_ministerio_prg" class="text-sm font-medium">Código Ministerial</Label>
+                                <Input
+                                    id="codigo_ministerio_prg"
+                                    v-model="form.codigo_ministerio_prg"
+                                    type="text"
+                                    maxlength="10"
+                                    placeholder="Ej: 1024"
+                                    :class="{ 'border-destructive': form.errors.codigo_ministerio_prg }"
+                                />
+                                <p v-if="form.errors.codigo_ministerio_prg" class="text-xs text-destructive">{{ form.errors.codigo_ministerio_prg }}</p>
+                            </div>
+
+                            <div class="space-y-2">
+                                <Label for="siglas_prg" class="text-sm font-medium">Siglas</Label>
+                                <Input
+                                    id="siglas_prg"
+                                    v-model="form.siglas_prg"
+                                    type="text"
+                                    maxlength="10"
+                                    placeholder="Ej: INF"
+                                    :class="{ 'border-destructive': form.errors.siglas_prg }"
+                                />
+                                <p v-if="form.errors.siglas_prg" class="text-xs text-destructive">{{ form.errors.siglas_prg }}</p>
+                            </div>
                         </div>
 
-                        <!-- NOMBRE DEL PNF -->
-                        <div class="space-y-2">
-                            <Label for="nombre_pnf" class="text-sm font-medium">
-                                Nombre del PNF / Carrera <span class="text-destructive">*</span>
-                            </Label>
-                            <Input
-                                id="nombre_pnf"
-                                v-model="form.nombre_pnf"
-                                type="text"
-                                placeholder="Ej: PNF en Informática, Licenciatura en Administración"
-                                :class="{ 'border-destructive': form.errors.nombre_pnf }"
-                                required
-                            />
-                            <p v-if="form.errors.nombre_pnf" class="text-xs text-destructive">
-                                {{ form.errors.nombre_pnf }}
-                            </p>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div class="space-y-2">
+                                <Label for="nombre_prg" class="text-sm font-medium">
+                                    Nombre del Programa / Carrera <span class="text-destructive">*</span>
+                                </Label>
+                                <Input
+                                    id="nombre_prg"
+                                    v-model="form.nombre_prg"
+                                    type="text"
+                                    placeholder="Ej: PNF en Informática"
+                                    :class="{ 'border-destructive': form.errors.nombre_prg }"
+                                    required
+                                />
+                                <p v-if="form.errors.nombre_prg" class="text-xs text-destructive">{{ form.errors.nombre_prg }}</p>
+                            </div>
+
+                            <div class="space-y-2">
+                                <Label for="titulo_prg" class="text-sm font-medium">Título que Otorga</Label>
+                                <Input
+                                    id="titulo_prg"
+                                    v-model="form.titulo_prg"
+                                    type="text"
+                                    placeholder="Ej: Ingeniero en Informática"
+                                    :class="{ 'border-destructive': form.errors.titulo_prg }"
+                                />
+                                <p v-if="form.errors.titulo_prg" class="text-xs text-destructive">{{ form.errors.titulo_prg }}</p>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                            <div class="space-y-2">
+                                <Label for="tpg_id" class="text-sm font-medium">Tipo de Programa</Label>
+                                <select
+                                    id="tpg_id"
+                                    v-model="form.tpg_id"
+                                    class="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs"
+                                >
+                                    <option value="">Sin especificar</option>
+                                    <option v-for="t in tiposPrograma" :key="t.id_tpg" :value="t.id_tpg">
+                                        {{ t.nombre_tpg }}
+                                    </option>
+                                </select>
+                                <p v-if="form.errors.tpg_id" class="text-xs text-destructive">{{ form.errors.tpg_id }}</p>
+                            </div>
+
+                            <div class="space-y-2">
+                                <Label for="ree_id" class="text-sm font-medium">Régimen de Estudio</Label>
+                                <select
+                                    id="ree_id"
+                                    v-model="form.ree_id"
+                                    class="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs"
+                                >
+                                    <option value="">Sin especificar</option>
+                                    <option v-for="r in regimenesEstudio" :key="r.id_ree" :value="r.id_ree">
+                                        {{ r.nombre_ree }}
+                                    </option>
+                                </select>
+                                <p v-if="form.errors.ree_id" class="text-xs text-destructive">{{ form.errors.ree_id }}</p>
+                            </div>
+
+                            <div class="space-y-2">
+                                <Label for="moe_id" class="text-sm font-medium">Modalidad</Label>
+                                <select
+                                    id="moe_id"
+                                    v-model="form.moe_id"
+                                    class="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs"
+                                >
+                                    <option value="">Sin especificar</option>
+                                    <option v-for="m in modalidadesEstudio" :key="m.id_moe" :value="m.id_moe">
+                                        {{ m.nombre_moe }}
+                                    </option>
+                                </select>
+                                <p v-if="form.errors.moe_id" class="text-xs text-destructive">{{ form.errors.moe_id }}</p>
+                            </div>
+
+                            <div class="space-y-2">
+                                <Label for="esm_id" class="text-sm font-medium">Escala de Medición</Label>
+                                <select
+                                    id="esm_id"
+                                    v-model="form.esm_id"
+                                    class="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs"
+                                >
+                                    <option value="">Sin especificar</option>
+                                    <option v-for="e in escalasMedicion" :key="e.id_esm" :value="e.id_esm">
+                                        {{ e.nombre_esm }}
+                                    </option>
+                                </select>
+                                <p v-if="form.errors.esm_id" class="text-xs text-destructive">{{ form.errors.esm_id }}</p>
+                            </div>
+
+                            <div class="space-y-2">
+                                <Label for="intermedia_prg" class="text-sm font-medium">Salida Intermedia</Label>
+                                <select
+                                    id="intermedia_prg"
+                                    v-model="form.intermedia_prg"
+                                    class="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs"
+                                >
+                                    <option value="S">Sí</option>
+                                    <option value="N">No</option>
+                                </select>
+                                <p v-if="form.errors.intermedia_prg" class="text-xs text-destructive">{{ form.errors.intermedia_prg }}</p>
+                            </div>
                         </div>
                     </CardContent>
 
-                    <CardFooter class="flex items-center justify-end gap-3 border-t bg-muted/10 px-6 py-4">
-                        <Button as-child variant="outline">
-                            <Link :href="route('academico.pnf.index')">
-                                Cancelar
-                            </Link>
-                        </Button>
-                        <Button type="submit" :disabled="form.processing" class="gap-2">
-                            <Save class="h-4 w-4" />
-                            <span>{{ form.processing ? 'Guardando...' : 'Guardar' }}</span>
-                        </Button>
+                    <CardFooter class="border-t border-slate-100 bg-muted/20 px-6 py-4 dark:border-slate-800/60">
+                        <CrudFormFooter
+                            :cancel-href="route('academico.pnf.index')"
+                            :processing="form.processing"
+                        />
                     </CardFooter>
                 </form>
             </Card>

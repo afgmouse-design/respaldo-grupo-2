@@ -2,147 +2,147 @@
 
 namespace App\Models\EstructuraAcademica\Maestros;
 
+use App\Models\Concerns\HandlesSoftDeleteWithStatus;
 use App\Models\Concerns\RegistraEnBitacora;
+use App\Models\Concerns\UsesStatusCatalog;
+use App\Models\ProgramacionAcademica\Maestros\Seccion;
 use App\Models\User;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Modelo: Malla Curricular (tabla `malla_curricular`).
  *
- * Módulo: Estructura Académica / Currículo.
- * Propósito: Gestiona los diseños curriculares y planes de estudio cabecera asociados a cada PNF.
+ * Propósito: Gestiona los diseños curriculares asociados a un Programa (`prg_id`).
  *
- * Actualización 2026-11-08:
- * Se añadió `prg_id` a `$fillable` y `$casts` para mantener sincronizada la llave foránea del programa
- * junto con `pnf_id` y el número de cohorte (`codigo_gaceta_mac`).
+ * Historial:
+ *  - 2026-11-14: Alineado a `sogac_mio.sql` (`prg_id -> programa.id_prg`, totales `total_credito_*`,
+ *    `total_horas_*`, `total_unidades_*`, extensiones aditivas `version_pensum_mac` y `observacion_mac`,
+ *    `status_id` y `SoftDeletes`, sin `pnf_id` ni `status` booleano).
+ *  - 2026-11-16: Añadido `eliminarConSoftDelete` para baja lógica en interfaz (`deleted_at` + `status_id = 2`)
+ *    hacia `malla_curricular_detalle`.
  */
 class MallaCurricular extends Model
 {
+    use SoftDeletes;
     use RegistraEnBitacora;
+    use UsesStatusCatalog;
+    use HandlesSoftDeleteWithStatus;
 
-    /** Nombre explícito de la tabla en singular. */
     protected $table = 'malla_curricular';
-
-    /** Llave primaria personalizada. */
     protected $primaryKey = 'id_mac';
-
-    /** Módulo para auditoría en bitácora. */
     protected $moduloAuditoria = 'MallaCurricular';
 
-    /** Desactivación de timestamps automáticos de Eloquent si se manejan explícitamente o nativos. */
-    public $timestamps = false;
-
-    /**
-     * Atributos asignables masivamente.
-     */
     protected $fillable = [
+        'prg_id',
+        'tra_inicio_id',
+        'salida_tsu_sem_id',
+        'salida_ing_sem_id',
         'nombre_mac',
         'codigo_gaceta_mac',
         'fecha_aprobacion_mac',
-        'observacion_mac',
-        'pnf_id',
-        'prg_id',
         'version_pensum_mac',
-        'creditos_minimos_tsu_mac',
-        'horas_minimas_tsu_mac',
-        'materias_obligatorias_tsu_mac',
-        'creditos_minimos_ing_mac',
-        'horas_minimas_ing_mac',
-        'materias_obligatorias_ing_mac',
-        'creditos_minimos_prosecucion_mac',
+        'observacion_mac',
+        'total_credito_tsu_mac',
+        'total_credito_ing_mac',
+        'total_horas_tsu_mac',
+        'total_horas_ing_mac',
+        'total_unidades_tsu_mac',
+        'total_unidades_ing_mac',
+        'total_credito_prosecucion_mac',
+        'total_horas_prosecucion_mac',
+        'total_unidades_prosecucion_mac',
         'status_id',
-        'status',
         'created_id',
         'updated_id',
     ];
 
-    /** Conversión de tipos de datos nativos. */
     protected $casts = [
-        'id_mac'                           => 'integer',
-        'pnf_id'                           => 'integer',
-        'fecha_aprobacion_mac'             => 'date',
-        'creditos_minimos_tsu_mac'         => 'integer',
-        'horas_minimas_tsu_mac'            => 'integer',
-        'materias_obligatorias_tsu_mac'    => 'integer',
-        'creditos_minimos_ing_mac'         => 'integer',
-        'horas_minimas_ing_mac'            => 'integer',
-        'materias_obligatorias_ing_mac'    => 'integer',
-        'creditos_minimos_prosecucion_mac' => 'integer',
-        'status'                           => 'boolean',
-        'status_id'                        => 'integer',
+        'id_mac'                         => 'integer',
+        'prg_id'                         => 'integer',
+        'tra_inicio_id'                  => 'integer',
+        'salida_tsu_sem_id'              => 'integer',
+        'salida_ing_sem_id'              => 'integer',
+        'fecha_aprobacion_mac'           => 'date',
+        'total_credito_tsu_mac'          => 'integer',
+        'total_credito_ing_mac'          => 'integer',
+        'total_horas_tsu_mac'            => 'integer',
+        'total_horas_ing_mac'            => 'integer',
+        'total_unidades_tsu_mac'         => 'integer',
+        'total_unidades_ing_mac'         => 'integer',
+        'total_credito_prosecucion_mac'  => 'integer',
+        'total_horas_prosecucion_mac'    => 'integer',
+        'total_unidades_prosecucion_mac' => 'integer',
+        'status_id'                      => 'integer',
     ];
 
-    /** Atributos virtuales calculados. */
-    protected $appends = ['est_mac'];
-
-    /**
-     * Accesor para el estatus lógico de compatibilidad.
-     */
-    public function getEstMacAttribute(): bool
+    public function programa(): BelongsTo
     {
-        return (bool) ($this->status_id === 1);
+        return $this->belongsTo(Programa::class, 'prg_id', 'id_prg');
     }
 
-    /**
-     * Relación Eloquent: Programa Nacional de Formación (PNF) al que pertenece.
-     */
-    public function pnf(): BelongsTo
+    public function trayectoInicio(): BelongsTo
     {
-        return $this->belongsTo(Pnf::class, 'pnf_id', 'id_pnf');
+        return $this->belongsTo(Trayecto::class, 'tra_inicio_id', 'id_tra');
     }
 
-    /**
-     * Relación Eloquent: Materias / Unidades curriculares asignadas en el detalle de la malla.
-     */
-    public function detalles(): \Illuminate\Database\Eloquent\Relations\HasMany
+    public function salidaTsuSemestre(): BelongsTo
+    {
+        return $this->belongsTo(Semestre::class, 'salida_tsu_sem_id', 'id_sem');
+    }
+
+    public function salidaIngSemestre(): BelongsTo
+    {
+        return $this->belongsTo(Semestre::class, 'salida_ing_sem_id', 'id_sem');
+    }
+
+    public function detalles(): HasMany
     {
         return $this->hasMany(MallaCurricularDetalle::class, 'mac_id', 'id_mac');
     }
 
-    /**
-     * Relación Eloquent: Usuario creador del registro.
-     */
+    public function secciones(): HasMany
+    {
+        return $this->hasMany(Seccion::class, 'mac_id', 'id_mac');
+    }
+
     public function creador(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_id');
     }
 
-    /**
-     * Relación Eloquent: Usuario actualizador del registro.
-     */
     public function actualizador(): BelongsTo
     {
         return $this->belongsTo(User::class, 'updated_id');
     }
 
-    /**
-     * Obtiene los registros paginados aplicando OBLIGATORIAMENTE el filtro de registros activos (status_id = 1)
-     * e incluyendo la relación con PNF.
-     *
-     * @param string|array|null $busqueda Término de búsqueda o array de filtros
-     * @param int $porPagina Cantidad de registros por página
-     */
-    public static function obtenerPaginados($busqueda = null, int $porPagina = 10): LengthAwarePaginator
+    public function scopeActivos(Builder $query): Builder
+    {
+        return $query->where('status_id', self::STATUS_ACTIVO);
+    }
+
+    public static function obtenerPaginados(array|string|null $busqueda = null, int $porPagina = 10): LengthAwarePaginator
     {
         $search = is_array($busqueda) ? ($busqueda['search'] ?? null) : $busqueda;
-        $status = is_array($busqueda) ? ($busqueda['status'] ?? null) : null;
+        $statusId = static::resolverFiltroStatusId(is_array($busqueda) ? ($busqueda['status'] ?? $busqueda['status_id'] ?? null) : null);
 
-        $query = static::with('pnf');
+        $query = static::with('programa')
+            ->when($statusId !== null, fn ($q) => $q->where('status_id', $statusId));
 
-        if ($status !== null && $status !== '' && $status !== 'all') {
-            $query->where('status_id', filter_var($status, FILTER_VALIDATE_BOOLEAN) ? 1 : 2);
-        }
-
-        if (!empty($search)) {
+        if (! empty($search)) {
             $query->where(function ($q) use ($search) {
                 $q->where('nombre_mac', 'ilike', "%{$search}%")
-                  ->orWhere('codigo_gaceta_mac', 'ilike', "%{$search}%")
-                  ->orWhereHas('pnf', function ($qp) use ($search) {
-                      $qp->where('nombre_pnf', 'ilike', "%{$search}%")
-                         ->orWhere('codigo_pnf', 'ilike', "%{$search}%");
-                  });
+                    ->orWhere('codigo_gaceta_mac', 'ilike', "%{$search}%")
+                    ->orWhereHas('programa', function ($qp) use ($search) {
+                        $qp->where('nombre_prg', 'ilike', "%{$search}%")
+                            ->orWhere('codigo_prg', 'ilike', "%{$search}%")
+                            ->orWhere('codigo_ministerio_prg', 'ilike', "%{$search}%");
+                    });
             });
         }
 
@@ -151,33 +151,50 @@ class MallaCurricular extends Model
             ->withQueryString();
     }
 
-    /**
-     * Actualiza el status_id del registro (1 = Activo, 2 = Inactivo) y sincroniza el campo booleano status.
-     *
-     * @param int $id Identificador único de la malla curricular
-     * @param int $estado Código del nuevo estado (por defecto 2 = inactivo)
-     */
-    public static function alternarEstatus(int $id, int $estado = 2): bool
+    public static function alternarEstatus(int $id, int $estado = self::STATUS_INACTIVO): bool
     {
         $registro = static::where('id_mac', $id)->first();
-
-        if (!$registro) {
+        if (! $registro) {
             return false;
         }
 
-        // Si se intenta activar, verificar que el PNF padre no esté inactivo
-        if ($estado === 1) {
-            $pnf = Pnf::where('id_pnf', $registro->pnf_id)->first();
-            if ($pnf && ($pnf->status_id === 2 || $pnf->status === false)) {
-                throw new \DomainException("No se puede activar esta malla curricular porque su programa (PNF '{$pnf->nombre_pnf}') se encuentra inactivo.");
+        if ($estado === self::STATUS_ACTIVO) {
+            $programa = Programa::where('id_prg', $registro->prg_id)->first();
+            if ($programa && (int) $programa->status_id !== self::STATUS_ACTIVO) {
+                throw new \DomainException("No se puede activar esta malla curricular porque su programa '{$programa->nombre_prg}' se encuentra inactivo.");
             }
         }
 
         return (bool) $registro->update([
             'status_id'  => $estado,
-            'status'     => ($estado === 1),
             'updated_id' => auth()->id(),
         ]);
     }
-}
 
+    /**
+     * Elimina lógicamente la malla curricular y sus detalles (`deleted_at` + `status_id = 2`)
+     * preservando los registros en PostgreSQL.
+     */
+    public static function eliminarConSoftDelete(int $id, ?int $userId = null): array
+    {
+        return DB::transaction(function () use ($id, $userId) {
+            $malla = static::where('id_mac', $id)->firstOrFail();
+            $nombre = $malla->nombre_mac;
+
+            static::ejecutarBajaLogicaConHijos(
+                $malla,
+                [
+                    ['table' => 'malla_curricular_detalle', 'pk' => 'id_mcd', 'fk' => 'mac_id'],
+                ],
+                $userId,
+                self::STATUS_INACTIVO
+            );
+
+            return [
+                'nombre'    => $nombre,
+                'status_id' => self::STATUS_INACTIVO,
+                'estatus'   => false,
+            ];
+        });
+    }
+}

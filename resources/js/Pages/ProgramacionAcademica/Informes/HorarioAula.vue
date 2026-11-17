@@ -3,10 +3,14 @@
  * Vista Standalone: Horario De Aula (Informes)
  *
  * Propósito: Visualización e impresión de la cuadrícula horaria semanal
- * de ocupación de un aula o laboratorio determinado.
+ * de ocupación de un aula o laboratorio determinado sobre `horario` + `carga_academica`.
+ *
+ * Historial:
+ *  - 2026-11-15: Alineado a `horario(id_hor)`, `aula(codigo_aula_aul, capacidad_maxima_aul)`,
+ *    `carga_academica`, `unidad_curricular.nombre_unc` y `docente_perfil.persona`.
  */
 import { ref } from 'vue';
-import { Head, Link, router } from '@inertiajs/vue3';
+import { Head, router } from '@inertiajs/vue3';
 import { route } from 'ziggy-js';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { Button } from '@/components/ui/button';
@@ -16,12 +20,21 @@ import {
     Printer,
     Layers,
     UserCheck,
-    Clock,
 } from 'lucide-vue-next';
+import {
+    coincideDiaHorario,
+    formatearHoraCorta,
+    obtenerAulaEtiqueta,
+    obtenerNombreDocenteCarga,
+    obtenerNombreMateriaHorario,
+    obtenerSeccionHorario,
+} from '@/lib/academico';
 
 interface AulaItem {
     id_aul: number;
-    nombre_aul: string;
+    codigo_aula_aul?: string;
+    nombre_aul?: string;
+    capacidad_maxima_aul?: number;
     capacidad_aul?: number;
 }
 
@@ -46,8 +59,8 @@ const dias = [
     { id: 6, nombre: 'Sábado' },
 ];
 
-const getHorariosPorDia = (diaId: number) => {
-    return props.horarios.filter(h => h.dia_semana === diaId);
+const getHorariosPorDia = (diaId: number, diaNombre: string) => {
+    return props.horarios.filter((h) => coincideDiaHorario(h, diaId, diaNombre));
 };
 
 const imprimir = () => {
@@ -57,14 +70,13 @@ const imprimir = () => {
 
 <template>
     <AppLayout :breadcrumbs="[
-        { title: 'Programación Académica', href: route('seccion.index') },
-        { title: 'Informes', href: route('informes.secciones') },
-        { title: 'Horario De Aula', href: route('informes.horario_aula') },
+        { title: 'Programación Académica', subtitle: 'Secciones', href: route('seccion.index') },
+        { title: 'Informes', subtitle: 'Programación', href: route('informes.secciones') },
+        { title: 'Horario De Aula', subtitle: 'Cuadrícula', href: route('informes.horario_aula') },
     ]">
-        <Head :title="`Horario de Aula: ${props.aulaSeleccionada?.nombre_aul || 'Consulta'} - SOGAC`" />
+        <Head :title="`Horario de Aula: ${obtenerAulaEtiqueta(props.aulaSeleccionada, 'Consulta')} - SOGAC`" />
 
         <div class="space-y-6 p-4 md:p-8 max-w-7xl mx-auto">
-            <!-- CABECERA -->
             <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b pb-4 print:hidden">
                 <div>
                     <div class="flex items-center gap-2">
@@ -88,7 +100,7 @@ const imprimir = () => {
                     >
                         <option value="">-- Seleccionar Aula --</option>
                         <option v-for="aul in props.aulas" :key="aul.id_aul" :value="aul.id_aul">
-                            {{ aul.nombre_aul }} (Cap: {{ aul.capacidad_aul || 30 }})
+                            {{ obtenerAulaEtiqueta(aul) }} (Cap: {{ aul.capacidad_maxima_aul || aul.capacidad_aul || 30 }})
                         </option>
                     </select>
 
@@ -99,18 +111,16 @@ const imprimir = () => {
                 </div>
             </div>
 
-            <!-- TÍTULO DE IMPRESIÓN -->
             <div v-if="props.aulaSeleccionada" class="p-4 bg-card border rounded-xl shadow-xs">
                 <h2 class="text-lg font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
                     <School class="h-5 w-5 text-primary" />
-                    {{ props.aulaSeleccionada.nombre_aul }}
+                    {{ obtenerAulaEtiqueta(props.aulaSeleccionada) }}
                     <Badge variant="outline" class="text-xs">
-                        Capacidad: {{ props.aulaSeleccionada.capacidad_aul || 30 }} puestos
+                        Capacidad: {{ props.aulaSeleccionada.capacidad_maxima_aul || props.aulaSeleccionada.capacidad_aul || 30 }} puestos
                     </Badge>
                 </h2>
             </div>
 
-            <!-- MATRIZ SEMANAL -->
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
                 <div
                     v-for="dia in dias"
@@ -123,27 +133,27 @@ const imprimir = () => {
 
                     <div class="p-2 space-y-2 flex-1 min-h-[160px]">
                         <div
-                            v-for="h in getHorariosPorDia(dia.id)"
-                            :key="h.id_sho"
+                            v-for="h in getHorariosPorDia(dia.id, dia.nombre)"
+                            :key="h.id_hor ?? h.id_sho"
                             class="p-2.5 rounded-lg border bg-background text-xs space-y-1 border-l-4 border-l-indigo-600 shadow-2xs"
                         >
                             <div class="font-bold text-indigo-700 dark:text-indigo-400 font-mono text-[11px]">
-                                {{ h.hora_inicio }} - {{ h.hora_fin }}
+                                {{ formatearHoraCorta(h.hora_inicio_hor ?? h.hora_inicio) }} - {{ formatearHoraCorta(h.hora_fin_hor ?? h.hora_fin) }}
                             </div>
                             <div class="font-bold text-slate-900 dark:text-slate-100">
-                                {{ h.seccion_unidad_docente?.malla_curricular_detalle?.unidad_curricular?.nombre_ucu || 'Materia' }}
+                                {{ obtenerNombreMateriaHorario(h) }}
                             </div>
                             <div class="text-[11px] text-muted-foreground flex items-center gap-1">
                                 <Layers class="h-3 w-3" />
-                                <span>Sec: {{ h.seccion_unidad_docente?.seccion?.nombre_sec || 'N/A' }}</span>
+                                <span>Sec: {{ obtenerSeccionHorario(h) }}</span>
                             </div>
                             <div class="text-[11px] text-muted-foreground flex items-center gap-1">
                                 <UserCheck class="h-3 w-3" />
-                                <span>Prof: {{ h.seccion_unidad_docente?.docente?.name || 'Por Asignar' }}</span>
+                                <span>Prof: {{ obtenerNombreDocenteCarga(h.carga_academica ?? h.seccion_unidad_docente) }}</span>
                             </div>
                         </div>
 
-                        <div v-if="getHorariosPorDia(dia.id).length === 0" class="text-center py-6 text-muted-foreground text-xs italic">
+                        <div v-if="getHorariosPorDia(dia.id, dia.nombre).length === 0" class="text-center py-6 text-muted-foreground text-xs italic">
                             Libre / Sin clase
                         </div>
                     </div>
@@ -152,4 +162,3 @@ const imprimir = () => {
         </div>
     </AppLayout>
 </template>
-

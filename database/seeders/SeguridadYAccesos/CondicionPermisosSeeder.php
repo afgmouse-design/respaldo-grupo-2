@@ -2,46 +2,38 @@
 
 namespace Database\Seeders\SeguridadYAccesos;
 
+use Database\Seeders\SeguridadYAccesos\Concerns\SincronizaPermisosModulo;
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 
 /**
- * Seeder: Permisos del maestro Condición (módulo Organización Institucional).
- * Registra de forma idempotente condicion.ver / crear / editar / eliminar.
+ * Seeder: Permisos del maestro Condición de Sede (`condicion_sede`).
  *
- * Ejecución: php artisan db:seed --class="Database\Seeders\SeguridadYAccesos\CondicionPermisosSeeder"
+ * Propósito: Registra `condicion_sede.*` y alias heredados `condicion.*` vinculados a
+ * `Organización Institucional` y `organizacion.condicion_sede`.
+ *
+ * Historial:
+ *  - 2026-11-14: Migrado desde el esquema legacy de `permiso` hacia `sogac_mio.sql`.
  */
 class CondicionPermisosSeeder extends Seeder
 {
+    use SincronizaPermisosModulo;
+
     public function run(): void
     {
-        if (!Schema::hasTable('modulo') || !Schema::hasTable('permiso')) {
-            $this->command->warn('Tablas "modulo" o "permiso" no existen en la BD actual. Omitiendo inserción de permisos.');
-            return;
-        }
-
-        $now = now();
-
-        DB::table('modulo')->updateOrInsert(
-            ['key' => 'organizacion_institucional'],
-            ['nombre' => 'Organización Institucional', 'activo' => true, 'created_at' => $now, 'updated_at' => $now]
+        $this->sincronizarPermisosDeModulo(
+            'Organización Institucional',
+            ['icono_mod' => 'Landmark', 'orden_mod' => 2],
+            [
+                'condicion_sede.ver'      => 'Ver condiciones de sede',
+                'condicion_sede.crear'    => 'Crear condiciones de sede',
+                'condicion_sede.editar'   => 'Editar condiciones de sede',
+                'condicion_sede.eliminar' => 'Activar/desactivar condiciones de sede',
+                'condicion.ver'           => 'Ver condiciones (alias)',
+                'condicion.crear'         => 'Crear condiciones (alias)',
+                'condicion.editar'        => 'Editar condiciones (alias)',
+                'condicion.eliminar'      => 'Activar/desactivar condiciones (alias)',
+            ],
+            'organizacion.condicion_sede'
         );
-        $moduloId = DB::table('modulo')->where('key', 'organizacion_institucional')->value('id_modulo');
-
-        $permisos = [
-            'condicion.ver'      => 'Ver condiciones',
-            'condicion.crear'    => 'Crear condiciones',
-            'condicion.editar'   => 'Editar condiciones',
-            'condicion.eliminar' => 'Activar/desactivar condiciones',
-        ];
-
-        foreach ($permisos as $key => $nombre) {
-            DB::table('permiso')->updateOrInsert(
-                ['key' => $key],
-                ['nombre' => $nombre, 'modulo_id' => $moduloId, 'activo' => true, 'created_at' => $now, 'updated_at' => $now]
-            );
-        }
     }
 }
-

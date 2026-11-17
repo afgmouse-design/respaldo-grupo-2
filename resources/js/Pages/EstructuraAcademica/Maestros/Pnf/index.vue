@@ -4,46 +4,58 @@
  *
  * Propósito: Página para consultar, buscar, filtrar y gestionar los Programas Nacionales
  * de Formación registrados en el SOGAC siguiendo el diseño estándar de Trayecto / Sede.
+ *
+ * Historial:
+ * - 2026-11-16: Estandarización global con <CrudActionButtons /> y botón superior "Nuevo PNF".
  */
-import { ref, watch, computed } from 'vue';
 import { Head, Link, router } from '@inertiajs/vue3';
+import { GraduationCap, Plus, X } from 'lucide-vue-next';
+import { computed, ref, watch } from 'vue';
 import { route } from 'ziggy-js';
-import AppLayout from '@/layouts/AppLayout.vue';
 import { Button } from '@/components/ui/button';
-import SuccessAlert from '@/components/ui/SuccessAlert.vue';
-import StatusSwitch from '@/components/ui/StatusSwitch.vue';
-import DataTable from '@/components/ui/DataTable.vue';
+import CrudActionButtons from '@/components/ui/CrudActionButtons.vue';
 import DataPagination from '@/components/ui/DataPagination.vue';
-import TableSkeleton from '@/components/ui/TableSkeleton.vue';
+import DataTable from '@/components/ui/DataTable.vue';
 import SearchFilter from '@/components/ui/filters/SearchFilter.vue';
 import TabFilter from '@/components/ui/filters/TabFilter.vue';
+import StatusSwitch from '@/components/ui/StatusSwitch.vue';
+import SuccessAlert from '@/components/ui/SuccessAlert.vue';
+import TableSkeleton from '@/components/ui/TableSkeleton.vue';
+import { useConfirmDialog } from '@/composables/useConfirmDialog';
 import { useDataFetching } from '@/composables/useDataFetching';
 import { useFlashAlert } from '@/composables/useFlashAlert';
-import { useConfirmDialog } from '@/composables/useConfirmDialog';
+import AppLayout from '@/layouts/AppLayout.vue';
+import { esActivo } from '@/lib/status';
 import type { Column } from '@/types/dataTable';
 import type { BreadcrumbItem } from '@/types/navigation';
-import {
-    GraduationCap,
-    Plus,
-    Eye,
-    Pencil,
-    Trash2,
-    Power,
-    X,
-} from 'lucide-vue-next';
 
 interface PnfItem {
-    id_pnf: number;
-    codigo_pnf: string | null;
-    nombre_pnf: string;
-    status_id: number;
-    status: boolean;
+    id_prg: number;
+    id_pnf?: number;
+    codigo_prg?: string | null;
+    codigo_ministerio_prg?: string | null;
+    codigo_pnf?: string | null;
+    nombre_prg: string;
+    nombre_pnf?: string;
+    siglas_prg?: string | null;
+    nombre_tpg?: string | null;
+    status_id?: number;
+    status?: boolean;
     created_at?: string;
     updated_at?: string;
 }
 
 const props = defineProps<{
-    pnfs: {
+    pnfs?: {
+        data: PnfItem[];
+        total: number;
+        per_page: number;
+        current_page: number;
+        last_page: number;
+        from: number;
+        to: number;
+    };
+    programas?: {
         data: PnfItem[];
         total: number;
         per_page: number;
@@ -55,6 +67,7 @@ const props = defineProps<{
     filters: {
         search?: string;
         status?: string;
+        status_id?: string;
         per_page?: number | string;
         registros_per_page?: number | string;
     };
@@ -64,19 +77,23 @@ const props = defineProps<{
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Dashboard', subtitle: 'Panel Principal', href: route('dashboard') },
     { title: 'Estructura Académica', subtitle: 'Currículo', href: '#' },
-    { title: 'PNF', subtitle: 'Oferta Académica', href: route('academico.pnf.index') },
+    { title: 'PNF / Programas', subtitle: 'Oferta Académica', href: route('academico.pnf.index') },
 ];
 
 const { showSuccessAlert, message, closeAlert } = useFlashAlert();
 const { confirmDialog } = useConfirmDialog();
 
 const columns: Column[] = [
-    { key: 'id_pnf', label: 'ID', align: 'center', width: 'w-20' },
-    { key: 'codigo_pnf', label: 'Código', align: 'center', width: 'w-36' },
-    { key: 'nombre_pnf', label: 'Nombre del PNF / Carrera', align: 'left' },
+    { key: 'id_prg', label: 'ID', align: 'center', width: 'w-20' },
+    { key: 'codigo_prg', label: 'Código', align: 'center', width: 'w-36' },
+    { key: 'nombre_prg', label: 'Nombre del Programa / PNF', align: 'left' },
     { key: 'status', label: 'Estatus', align: 'center', width: 'w-32' },
     { key: 'actions', label: 'Acciones', align: 'center', width: 'w-36' },
 ];
+
+const obtenerId = (row: PnfItem) => row.id_prg ?? row.id_pnf ?? 0;
+const obtenerNombre = (row: PnfItem) => row.nombre_prg ?? row.nombre_pnf ?? 'Programa';
+const obtenerCodigo = (row: PnfItem) => row.codigo_prg ?? row.codigo_ministerio_prg ?? row.codigo_pnf ?? null;
 
 const {
     data: pnfsData,
@@ -88,9 +105,9 @@ const {
     onPageChange,
     setFilter,
 } = useDataFetching(
-    () => props.pnfs,
+    () => props.programas ?? props.pnfs!,
     props.filters,
-    { routeName: 'academico.pnf.index', listRouteName: 'pnfs', perPageDefault: 10 }
+    { routeName: 'academico.pnf.index', listRouteName: 'programas', perPageDefault: 10 }
 );
 
 const perPage = ref(Number(props.filters?.per_page ?? 10));
@@ -100,10 +117,10 @@ const cambiarPorPagina = (nuevaCantidad: string | number) => {
     changePerPage(String(nuevaCantidad));
 };
 
-const pnfs = computed(() => props.pnfs);
+const pnfs = computed(() => props.programas ?? props.pnfs);
 
 watch(
-    () => props.pnfs,
+    () => props.programas ?? props.pnfs,
     (newPnfs) => {
         if (newPnfs) {
             pnfsData.value = newPnfs;
@@ -113,31 +130,22 @@ watch(
 );
 
 const alternarEstatus = async (row: PnfItem) => {
-    const activo = row.status ?? (row.status_id === 1);
+    const activo = esActivo(row);
     const accion = activo ? 'desactivar' : 'activar';
     const advertenciaCascada = activo
         ? ' Esto también desactivará automáticamente todas sus mallas curriculares asociadas.'
         : '';
 
     if (await confirmDialog(
-        `¿Está seguro de que desea ${accion} el programa "${row.nombre_pnf}"?${advertenciaCascada}`,
+        `¿Está seguro de que desea ${accion} el programa "${obtenerNombre(row)}"?${advertenciaCascada}`,
         `Confirmar ${accion} de programa`
     )) {
+        const id = obtenerId(row);
         const rutaStatus = route().has('academico.pnf.status')
-            ? route('academico.pnf.status', row.id_pnf)
-            : route('pnf.status', row.id_pnf);
+            ? route('academico.pnf.status', id)
+            : route('pnf.status', id);
         router.patch(rutaStatus, {}, { preserveScroll: true });
     }
-};
-
-const eliminarRegistro = async (ruta: string, row?: PnfItem) => { 
-    const nombre = row?.nombre_pnf ?? 'este programa';
-    if (await confirmDialog(
-        `¿Está seguro de que desea dar de baja "${nombre}"? Sus mallas curriculares asociadas también quedarán inactivas.`,
-        'Confirmar baja lógica'
-    )) { 
-        router.delete(ruta, { preserveScroll: true }); 
-    } 
 };
 </script>
 
@@ -170,10 +178,10 @@ const eliminarRegistro = async (ruta: string, row?: PnfItem) => {
                 </div>
 
                 <div class="flex items-center gap-2">
-                    <Button as-child size="default" class="shadow-sm">
+                    <Button as-child size="default" class="gap-2 shadow-sm">
                         <Link :href="route('academico.pnf.create')">
-                            <Plus class="h-4 w-4 mr-2" />
-                            Registrar PNF
+                            <Plus class="h-4 w-4" />
+                            Nuevo PNF
                         </Link>
                     </Button>
                 </div>
@@ -228,75 +236,51 @@ const eliminarRegistro = async (ruta: string, row?: PnfItem) => {
                     :filtros-activos="hasActiveFilters"
                 >
                     <!-- SLOT: ID -->
-                    <template #id_pnf="{ row }">
+                    <template #id_prg="{ row }">
                         <span class="font-mono text-xs font-semibold px-2 py-0.5 rounded bg-muted/60 text-foreground">
-                            #{{ row.id_pnf }}
+                            #{{ obtenerId(row) }}
                         </span>
                     </template>
 
                     <!-- SLOT: CÓDIGO -->
-                    <template #codigo_pnf="{ row }">
+                    <template #codigo_prg="{ row }">
                         <span class="font-mono text-xs font-semibold px-2 py-0.5 rounded bg-muted/60 text-foreground">
-                            {{ row.codigo_pnf || 'N/A' }}
+                            {{ obtenerCodigo(row) || 'N/A' }}
                         </span>
                     </template>
 
                     <!-- SLOT: NOMBRE PNF -->
-                    <template #nombre_pnf="{ row }">
-                        <span class="font-medium text-slate-900 dark:text-slate-100">
-                            {{ row.nombre_pnf }}
-                        </span>
+                    <template #nombre_prg="{ row }">
+                        <div class="flex flex-col">
+                            <span class="font-medium text-slate-900 dark:text-slate-100">
+                                {{ obtenerNombre(row) }}
+                            </span>
+                            <span v-if="row.siglas_prg || row.nombre_tpg" class="text-[11px] text-muted-foreground">
+                                {{ [row.siglas_prg, row.nombre_tpg].filter(Boolean).join(' · ') }}
+                            </span>
+                        </div>
                     </template>
 
                     <!-- SLOT: ESTATUS -->
                     <template #status="{ row }">
                         <StatusSwitch
-                            :key="`pnf-${row.id_pnf}-${row.status ?? row.status_id}`"
-                            :status="row.status ?? (row.status_id === 1)"
+                            :key="`pnf-${obtenerId(row)}-${row.status_id ?? row.status}`"
+                            :status="esActivo(row)"
                             @toggle="alternarEstatus(row)"
                         />
                     </template>
 
-                    <!-- SLOT: ACCIONES DIRECTAS STANDALONE -->
+                    <!-- SLOT: ACCIONES ESTÁNDAR -->
                     <template #actions="{ row, item }">
-                        <div class="flex items-center justify-center gap-1.5">
-                            <!-- Ver Detalle -->
-                            <Button
-                                as-child
-                                variant="ghost"
-                                size="icon"
-                                class="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950/40"
-                                title="Ver detalles"
-                            >
-                                <Link :href="route('academico.pnf.show', (row || item).id_pnf)">
-                                    <Eye class="h-4 w-4" />
-                                </Link>
-                            </Button>
-
-                            <!-- Editar -->
-                            <Button
-                                as-child
-                                variant="ghost"
-                                size="icon"
-                                class="h-8 w-8 text-amber-600 hover:text-amber-700 dark:text-amber-400"
-                                title="Editar datos"
-                            >
-                                <Link :href="route('academico.pnf.edit', (row || item).id_pnf)">
-                                    <Pencil class="h-4 w-4" />
-                                </Link>
-                            </Button>
-
-                            <!-- Desactivar / Baja Lógica -->
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                class="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
-                                :title="(row || item)?.status ? 'Desactivar programa' : 'Activar programa'"
-                                @click="alternarEstatus(row || item)"
-                            >
-                                <Power class="h-4 w-4" />
-                            </Button>
-                        </div>
+                        <CrudActionButtons
+                            show-route="academico.pnf.show"
+                            edit-route="academico.pnf.edit"
+                            delete-route="academico.pnf.destroy"
+                            :record-id="obtenerId(row || item)"
+                            :record-name="obtenerNombre(row || item)"
+                            confirm-title="Confirmar baja lógica"
+                            :confirm-message="`¿Está seguro de que desea dar de baja &quot;${obtenerNombre(row || item)}&quot;? Sus mallas curriculares asociadas también quedarán inactivas.`"
+                        />
                     </template>
                 </DataTable>
             </div>

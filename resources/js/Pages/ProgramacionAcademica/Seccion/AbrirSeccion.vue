@@ -14,6 +14,7 @@ import { Input } from '@/components/ui/input';
 import Badge from '@/components/ui/badge/Badge.vue';
 import SuccessAlert from '@/components/ui/SuccessAlert.vue';
 import { useFlashAlert } from '@/composables/useFlashAlert';
+import { esActivo } from '@/lib/status';
 import {
     DoorOpen,
     ArrowLeft,
@@ -27,11 +28,12 @@ interface SeccionItem {
     id_sec: number;
     nombre_sec: string;
     codigo_sec?: string | null;
-    tipo_seccion?: string | null;
+    tipo_seccion?: string | { nombre_tis?: string } | null;
     semestre_sec?: number | null;
     trayecto_sec?: number | null;
     cupo_maximo_sec?: number | null;
-    status: boolean;
+    status_id?: number;
+    status?: boolean;
     cohorte_sede?: {
         cohorte?: {
             nombre_coh?: string;
@@ -61,7 +63,7 @@ const buscar = () => {
 
 const abrirSeccion = (id: number) => {
     if (confirm('¿Está seguro de aperturar y activar esta sección para el período?')) {
-        router.post(route('seccion.cambiar_estado', id), { status: true });
+        router.post(route('seccion.cambiar_estado', id), { status_id: 1 });
     }
 };
 </script>
@@ -148,13 +150,13 @@ const abrirSeccion = (id: number) => {
                                 {{ sec.cupo_maximo_sec || 35 }}
                             </td>
                             <td class="p-4 text-center">
-                                <Badge :variant="sec.status ? 'default' : 'secondary'">
-                                    {{ sec.status ? 'Abierta / Activa' : 'Cerrada / Inactiva' }}
+                                <Badge :variant="esActivo(sec) ? 'default' : 'secondary'">
+                                    {{ esActivo(sec) ? 'Abierta / Activa' : 'Cerrada / Inactiva' }}
                                 </Badge>
                             </td>
                             <td class="p-4 text-right">
                                 <Button
-                                    v-if="!sec.status"
+                                    v-if="!esActivo(sec)"
                                     size="sm"
                                     class="bg-emerald-600 hover:bg-emerald-700 text-white"
                                     @click="abrirSeccion(sec.id_sec)"

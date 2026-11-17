@@ -1,14 +1,15 @@
 <?php
 
+/**
+ * Propósito: Valida la actualización de un Tipo de Aula (`tipo_aula`).
+ * Historial: Actualizado para respetar SoftDeletes y soportar route parameter objeto o entero.
+ */
+
 namespace App\Http\Requests\ProgramacionAcademica\TipoAula;
 
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
-/**
- * Form Request: validación de servidor para actualizar un Tipo de Aula.
- * Las reglas unique ignoran el registro actual (->ignore($id, 'id_tia')).
- */
 class UpdateTipoAulaRequest extends FormRequest
 {
     public function authorize(): bool
@@ -18,11 +19,12 @@ class UpdateTipoAulaRequest extends FormRequest
 
     public function rules(): array
     {
-        $id = $this->route('tipo_aula');
+        $param = $this->route('tipo_aula');
+        $id = is_object($param) ? ($param->id_tia ?? $param->getKey()) : $param;
 
         return [
-            'nombre_tia'      => ['required', 'string', 'min:2', 'max:150', Rule::unique('tipo_aula', 'nombre_tia')->ignore($id, 'id_tia')],
-            'codigo_tia'      => ['nullable', 'string', 'max:30', Rule::unique('tipo_aula', 'codigo_tia')->ignore($id, 'id_tia')],
+            'nombre_tia'      => ['required', 'string', 'min:2', 'max:150', Rule::unique('tipo_aula', 'nombre_tia')->ignore($id, 'id_tia')->whereNull('deleted_at')],
+            'codigo_tia'      => ['nullable', 'string', 'max:30', Rule::unique('tipo_aula', 'codigo_tia')->ignore($id, 'id_tia')->whereNull('deleted_at')],
             'descripcion_tia' => ['nullable', 'string', 'max:1000'],
         ];
     }
@@ -36,4 +38,3 @@ class UpdateTipoAulaRequest extends FormRequest
         ];
     }
 }
-

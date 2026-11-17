@@ -204,17 +204,19 @@
                     </td>
                     <td>
                         {{ $sec->mallaCurricular ? $sec->mallaCurricular->nombre_mac : 'Sin Malla Asignada' }}
-                        @if($sec->mallaCurricular && $sec->mallaCurricular->pnf)
-                            <br><small style="color: #64748b;">{{ $sec->mallaCurricular->pnf->nombre_pnf }}</small>
+                        @if($sec->mallaCurricular && $sec->mallaCurricular->programa)
+                            <br><small style="color: #64748b;">{{ $sec->mallaCurricular->programa->nombre_prg }}</small>
+                        @elseif($sec->programa)
+                            <br><small style="color: #64748b;">{{ $sec->programa->nombre_prg }}</small>
                         @endif
                     </td>
                     <td>
-                        @if($sec->unidadesDocentes && $sec->unidadesDocentes->isNotEmpty())
-                            @foreach($sec->unidadesDocentes as $ud)
+                        @if($sec->cargasAcademicas && $sec->cargasAcademicas->isNotEmpty())
+                            @foreach($sec->cargasAcademicas as $caa)
                                 <div style="margin-bottom: 2px;">
-                                    • {{ $ud->mallaCurricularDetalle->unidadCurricular->nombre_unc ?? 'Materia' }}
-                                    @if($ud->docente)
-                                        <small style="color: #64748b;">(Prof. {{ $ud->docente->name }})</small>
+                                    • {{ $caa->unidadCurricular->nombre_unc ?? 'Materia' }}
+                                    @if($caa->docentePerfil && $caa->docentePerfil->persona)
+                                        <small style="color: #64748b;">(Prof. {{ $caa->docentePerfil->persona->nombres_per }} {{ $caa->docentePerfil->persona->apellidos_per }})</small>
                                     @endif
                                 </div>
                             @endforeach
@@ -226,8 +228,8 @@
                         {{ $sec->cupo_maximo_sec ?? 30 }}
                     </td>
                     <td style="text-align: center;">
-                        <span class="badge-status {{ $sec->status ? 'badge-active' : 'badge-inactive' }}">
-                            {{ $sec->status ? 'Abierta' : 'Cerrada' }}
+                        <span class="badge-status {{ $sec->status_id === 1 ? 'badge-active' : 'badge-inactive' }}">
+                            {{ $sec->status_id === 1 ? 'Abierta' : 'Cerrada' }}
                         </span>
                     </td>
                 </tr>

@@ -4,27 +4,29 @@
  *
  * Propósito: Página independiente con formulario estructurado para dar de alta una nueva
  * sede, campus o núcleo institucional en el SOGAC. Cumple con la arquitectura Zero-Modal.
+ *
+ * Historial:
+ *  - 2026-11-14: Alineado FK de condición a `cse_id` (`condicion_sede.id_cse`, `nombre_cse`).
+ *  - 2026-11-16: Estandarización del pie de formulario con <CrudFormFooter />.
  */
 import { Head, Link, useForm } from '@inertiajs/vue3';
+import {
+    AlertCircle,
+    ArrowLeft,
+    Building,
+    FileText,
+    GraduationCap,
+    Phone,
+} from 'lucide-vue-next';
 import { route } from 'ziggy-js';
-import AppLayout from '@/layouts/AppLayout.vue';
 import { Button } from '@/components/ui/button';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
+import CrudFormFooter from '@/components/ui/CrudFormFooter.vue';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
-import type { BreadcrumbItem } from '@/types/navigation';
+import AppLayout from '@/layouts/AppLayout.vue';
 import { formatNombre } from '@/lib/utils';
-import {
-    Building,
-    ArrowLeft,
-    Save,
-    AlertCircle,
-    GraduationCap,
-    FileText,
-    Phone,
-    MapPin,
-    Tag,
-} from 'lucide-vue-next';
+import type { BreadcrumbItem } from '@/types/navigation';
 
 interface UniversidadItem {
     id_uni: number;
@@ -50,8 +52,8 @@ interface LocalidadItem {
 }
 
 interface CondicionItem {
-    id_cdn: number;
-    nombre_cdn: string;
+    id_cse: number;
+    nombre_cse: string;
 }
 
 const props = defineProps<{
@@ -73,7 +75,7 @@ const form = useForm({
     codigo_ministerio_sed: '',
     uni_id: (props.universidades && props.universidades.length > 0 ? props.universidades[0].id_uni : 1) as string | number,
     loc_id: '' as string | number,
-    cdn_id: '' as string | number,
+    cse_id: '' as string | number,
     direccion_sed: '',
     telefono_sed: '',
     correo_sed: '',
@@ -176,26 +178,26 @@ const submit = () => {
 
                             <!-- CONDICIÓN INSTITUCIONAL -->
                             <div class="space-y-2">
-                                <Label for="cdn_id" class="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                                <Label for="cse_id" class="text-sm font-semibold text-slate-700 dark:text-slate-300">
                                     Condición / Ámbito
                                 </Label>
                                 <select
-                                    id="cdn_id"
-                                    v-model="form.cdn_id"
+                                    id="cse_id"
+                                    v-model="form.cse_id"
                                     class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs focus:outline-none focus:ring-2 focus:ring-ring"
-                                    :class="{ 'border-red-500': form.errors.cdn_id }"
+                                    :class="{ 'border-red-500': form.errors.cse_id }"
                                 >
                                     <option value="">Sin especificar...</option>
                                     <option
-                                        v-for="cdn in props.condiciones"
-                                        :key="cdn.id_cdn"
-                                        :value="cdn.id_cdn"
+                                        v-for="cse in props.condiciones"
+                                        :key="cse.id_cse"
+                                        :value="cse.id_cse"
                                     >
-                                        {{ cdn.nombre_cdn }}
+                                        {{ cse.nombre_cse }}
                                     </option>
                                 </select>
-                                <span v-if="form.errors.cdn_id" class="text-xs text-red-500 block">
-                                    {{ form.errors.cdn_id }}
+                                <span v-if="form.errors.cse_id" class="text-xs text-red-500 block">
+                                    {{ form.errors.cse_id }}
                                 </span>
                             </div>
                         </CardContent>
@@ -463,16 +465,11 @@ const submit = () => {
                             </div>
                         </CardContent>
 
-                        <CardFooter class="flex items-center justify-end gap-3 border-t pt-4">
-                            <Button as-child variant="outline">
-                                <Link :href="route('organizacion.sede.index')">
-                                    Cancelar
-                                </Link>
-                            </Button>
-                            <Button type="submit" :disabled="form.processing" class="shadow-sm">
-                                <Save class="h-4 w-4 mr-2" />
-                                {{ form.processing ? 'Guardando...' : 'Guardar' }}
-                            </Button>
+                        <CardFooter class="border-t border-slate-100 bg-muted/20 px-6 py-4 dark:border-slate-800/60">
+                            <CrudFormFooter
+                                :cancel-href="route('organizacion.sede.index')"
+                                :processing="form.processing"
+                            />
                         </CardFooter>
                     </Card>
                 </div>

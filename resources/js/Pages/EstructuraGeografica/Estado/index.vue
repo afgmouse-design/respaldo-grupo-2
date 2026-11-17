@@ -11,35 +11,29 @@
  * Actualización (Interruptor de Estado - StatusSwitch):
  * Se incorporó el suiche interactivo en la columna de Estatus para activar y desactivar
  * estados directamente desde el listado con confirmación modal e integridad en cascada.
+ * - 2026-11-16: Estandarización global con <CrudActionButtons />, botón "Nuevo Estado" y columna "Acciones".
  */
-import { ref, watch, computed } from 'vue';
 import { Head, Link, router } from '@inertiajs/vue3';
+import { Building2, Globe, MapPin, Plus, X } from 'lucide-vue-next';
+import { computed, ref, watch } from 'vue';
 import { route } from 'ziggy-js';
-import AppLayout from '@/layouts/AppLayout.vue';
-import { Button } from '@/components/ui/button';
 import Badge from '@/components/ui/badge/Badge.vue';
-import StatusSwitch from '@/components/ui/StatusSwitch.vue';
-import SuccessAlert from '@/components/ui/SuccessAlert.vue';
-import DataTable from '@/components/ui/DataTable.vue';
+import { Button } from '@/components/ui/button';
+import CrudActionButtons from '@/components/ui/CrudActionButtons.vue';
 import DataPagination from '@/components/ui/DataPagination.vue';
-import TableSkeleton from '@/components/ui/TableSkeleton.vue';
+import DataTable from '@/components/ui/DataTable.vue';
 import SearchFilter from '@/components/ui/filters/SearchFilter.vue';
 import TabFilter from '@/components/ui/filters/TabFilter.vue';
+import StatusSwitch from '@/components/ui/StatusSwitch.vue';
+import SuccessAlert from '@/components/ui/SuccessAlert.vue';
+import TableSkeleton from '@/components/ui/TableSkeleton.vue';
+import { useConfirmDialog } from '@/composables/useConfirmDialog';
 import { useDataFetching } from '@/composables/useDataFetching';
 import { useFlashAlert } from '@/composables/useFlashAlert';
-import { useConfirmDialog } from '@/composables/useConfirmDialog';
+import AppLayout from '@/layouts/AppLayout.vue';
+import { esActivo, resolverStatusId } from '@/lib/status';
 import type { Column } from '@/types/dataTable';
 import type { BreadcrumbItem } from '@/types/navigation';
-import {
-    MapPin,
-    Plus,
-    Eye,
-    Pencil,
-    Trash2,
-    X,
-    Building2,
-    Globe,
-} from 'lucide-vue-next';
 
 interface PaisRef {
     id_pai: number;
@@ -49,9 +43,10 @@ interface PaisRef {
 interface EstadoItem {
     id_esd: number;
     nombre_esd: string;
+    iso_esd?: string | null;
     pai_id: number;
-    status: boolean;
-    est_esd?: boolean;
+    status_id?: number;
+    status?: boolean | number;
     puede_activarse?: boolean;
     pais?: PaisRef;
     municipios_count?: number;
@@ -95,7 +90,7 @@ const columns: Column[] = [
     { key: 'pais_rel', label: 'País Perteneciente', align: 'left', width: 'w-52' },
     { key: 'municipios_count', label: 'Municipios', align: 'center', width: 'w-40' },
     { key: 'status', label: 'Estatus', align: 'center', width: 'w-40' },
-    { key: 'actions', label: 'Acciones Directas', align: 'center', width: 'w-48' },
+    { key: 'actions', label: 'Acciones', align: 'center', width: 'w-36' },
 ];
 
 const {
@@ -135,11 +130,7 @@ watch(
     { deep: true, immediate: true }
 );
 
-// Lectura reactiva directa del campo de estatus de la fila
-const isActivo = (row: any) => {
-    const val = row?.status ?? row?.est_esd;
-    return val === true || val === 1 || val === '1' || val === 'true';
-};
+const isActivo = (row: any) => esActivo(row);
 
 // Determina si el estado puede ser activado (su entidad superior está activa)
 const puedeActivarse = (row: EstadoItem) => {
@@ -147,7 +138,7 @@ const puedeActivarse = (row: EstadoItem) => {
         return Boolean(row.puede_activarse);
     }
     if (row.pais) {
-        return Boolean((row.pais as any).status ?? (row.pais as any).est_pai ?? true);
+        return esActivo(row.pais);
     }
     return true;
 };
@@ -161,12 +152,6 @@ const alternarEstatus = async (row: EstadoItem) => {
 
     if (await confirmDialog(msg, `Confirmar ${accion} estado`)) {
         router.patch(route('geografia.estado.status', row.id_esd), {}, { preserveScroll: true });
-    }
-};
-
-const eliminarRegistro = async (ruta: string) => {
-    if (await confirmDialog('⚠️ ADVERTENCIA: ¿Estás seguro de eliminar este registro? Si tiene dependencias (hijos registrados), también serán eliminados en cascada para mantener la integridad del sistema.')) {
-        router.delete(ruta);
     }
 };
 </script>
@@ -200,10 +185,10 @@ const eliminarRegistro = async (ruta: string) => {
                 </div>
 
                 <div class="flex items-center gap-2">
-                    <Button as-child size="default" class="shadow-sm">
+                    <Button as-child size="default" class="gap-2 shadow-sm">
                         <Link :href="route('geografia.estado.create')">
-                            <Plus class="h-4 w-4 mr-2" />
-                            Registrar Estado
+                            <Plus class="h-4 w-4" />
+                            Nuevo Estado
                         </Link>
                     </Button>
                 </div>
@@ -276,6 +261,16 @@ const eliminarRegistro = async (ruta: string) => {
                     :resultados-totales="estados?.total ?? 0"
                     :filtros-activos="hasActiveFilters"
                 >
+                    <!-- SLOT: NOMBRE CON CÓDIGO ISO -->
+                    <template #nombre_esd="{ row }">
+                        <div class="flex items-center gap-2">
+                            <span class="font-medium">{{ row.nombre_esd }}</span>
+                            <Badge v-if="row.iso_esd" variant="outline" class="font-mono text-xs">
+                                {{ row.iso_esd }}
+                            </Badge>
+                        </div>
+                    </template>
+
                     <!-- SLOT: PAÍS PERTENECIENTE -->
                     <template #pais_rel="{ row }">
                         <Link
@@ -297,46 +292,27 @@ const eliminarRegistro = async (ruta: string) => {
                         </span>
                     </template>
 
-                    <!-- SLOT: ESTATUS (Interruptor reactivo con est_esd / status) -->
+                    <!-- SLOT: ESTATUS (`status_id`) -->
                     <template #status="{ row, item }">
                         <StatusSwitch
-                            :key="`estado-${(row || item)?.id_esd}-${((row || item)?.est_esd ?? (row || item)?.status)}`"
-                            :status="(row || item)?.est_esd ?? (row || item)?.status"
+                            :key="`estado-${(row || item)?.id_esd}-${resolverStatusId(row || item)}`"
+                            :status="resolverStatusId(row || item)"
                             :disabled="!isActivo(row || item) && !puedeActivarse(row || item)"
                             :title="!isActivo(row || item) && !puedeActivarse(row || item) ? 'No se puede activar mientras su país superior esté inactivo' : undefined"
                             @toggle="alternarEstatus(row || item)"
                         />
                     </template>
 
-                    <!-- SLOT: ACCIONES DIRECTAS STANDALONE (0 MODALES) -->
+                    <!-- SLOT: ACCIONES ESTÁNDAR -->
                     <template #actions="{ row }">
-                        <div class="flex items-center justify-center gap-1.5">
-                            <!-- Ver Detalle -->
-                            <Button as-child variant="ghost" size="icon" class="h-8 w-8 text-slate-600 hover:text-primary dark:text-slate-400" title="Ver ficha completa">
-                                <Link :href="route('geografia.estado.show', row.id_esd)">
-                                    <Eye class="h-4 w-4" />
-                                </Link>
-                            </Button>
-
-                            <!-- Editar -->
-                            <Button as-child variant="ghost" size="icon" class="h-8 w-8 text-amber-600 hover:text-amber-700 dark:text-amber-400" title="Editar datos">
-                                <Link :href="route('geografia.estado.edit', row.id_esd)">
-                                    <Pencil class="h-4 w-4" />
-                                </Link>
-                            </Button>
-
-                            <!-- Eliminar Estado (Baja lógica en cascada) -->
-                            <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                class="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
-                                title="Eliminar estado"
-                                @click="eliminarRegistro(route('geografia.estado.destroy', row.id_esd))"
-                            >
-                                <Trash2 class="h-4 w-4" />
-                            </Button>
-                        </div>
+                        <CrudActionButtons
+                            show-route="geografia.estado.show"
+                            edit-route="geografia.estado.edit"
+                            delete-route="geografia.estado.destroy"
+                            :record-id="row.id_esd"
+                            :record-name="row.nombre_esd"
+                            confirm-message="⚠️ ADVERTENCIA: ¿Estás seguro de eliminar este registro? Si tiene dependencias (hijos registrados), también serán eliminados en cascada para mantener la integridad del sistema."
+                        />
                     </template>
                 </DataTable>
             </div>

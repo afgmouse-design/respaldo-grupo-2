@@ -217,7 +217,7 @@ const imprimir = () => {
                                             :key="dm.id_mcd"
                                             class="inline-flex items-center px-2 py-0.5 rounded text-[11px] bg-muted/60 text-foreground border"
                                         >
-                                            {{ dm.malla_curricular?.pnf?.nombre_pnf || dm.malla_curricular?.nombre_mac }}
+                                            {{ dm.malla_curricular?.programa?.nombre_prg || dm.malla_curricular?.pnf?.nombre_pnf || dm.malla_curricular?.nombre_mac }}
                                         </span>
                                     </div>
                                     <span v-else class="text-xs text-muted-foreground italic">

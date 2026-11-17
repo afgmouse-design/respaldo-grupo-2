@@ -1,5 +1,10 @@
 <?php
 
+/**
+ * Propósito: Controlador CRUD para el catálogo maestro de Unidades Curriculares (`unidad_curricular`).
+ * Historial: Actualizado para operar exclusivamente sobre las columnas oficiales del dump (`codigo_unc`, `codigo_anterior_unc`, `nombre_unc`, `tuc_id`, `dep_id`, `status_id`), eliminando campos movidos a `malla_curricular_detalle` y el campo booleano `status`.
+ */
+
 namespace App\Http\Controllers\EstructuraAcademica\Maestros;
 
 use App\Http\Controllers\Controller;
@@ -8,6 +13,8 @@ use App\Models\EstructuraAcademica\Maestros\Trayecto;
 use App\Models\EstructuraAcademica\Maestros\UnidadCurricular;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -27,24 +34,49 @@ use Inertia\Response;
 class UnidadCurricularController extends Controller
 {
     /**
-     * Muestra el listado de unidades curriculares activas (status_id = 1) con filtros reactivos y paginación.
+     * Valida los atributos permitidos de la tabla `unidad_curricular`.
+     *
+     * Historial:
+     * - 2026-11-16: Añadida unicidad de `codigo_unc` filtrada por `deleted_at IS NULL` y
+     *   validación de existencia activa en `tipo_unidad_curricular`.
+     */
+    private function validarUnidad(Request $request, ?int $ignoreId = null): array
+    {
+        $uniqueCodigo = Rule::unique('unidad_curricular', 'codigo_unc')->whereNull('deleted_at');
+        if ($ignoreId !== null) {
+            $uniqueCodigo->ignore($ignoreId, 'id_unc');
+        }
+
+        return $request->validate([
+            'codigo_unc'          => ['nullable', 'string', 'max:30', $uniqueCodigo],
+            'codigo_anterior_unc' => ['nullable', 'string', 'max:30'],
+            'nombre_unc'          => ['required', 'string', 'max:255'],
+            'tuc_id'              => ['required', 'integer', Rule::exists('tipo_unidad_curricular', 'id_tuc')->whereNull('deleted_at')],
+            'dep_id'              => ['nullable', 'integer'],
+        ], [
+            'codigo_unc.unique' => 'Ya existe una unidad curricular activa con este código.',
+        ]);
+    }
+
+    /**
+     * Muestra la vista principal del Maestro de Unidades Curriculares con filtros y paginación.
      */
     public function index(Request $request): Response
     {
         $perPage = (int) ($request->input('per_page') ?? $request->input('registros_per_page') ?? 10);
-
-        $unidades = UnidadCurricular::obtenerPaginados(
-            $request->only(['search', 'status']),
-            $perPage
+        $filtros = array_merge(
+            $request->only(['search', 'status', 'status_id', 'fecha_inicio', 'fecha_fin', 'per_page', 'registros_per_page']),
+            ['per_page' => $perPage, 'registros_per_page' => $perPage]
         );
+        $unidades = UnidadCurricular::obtenerPaginados($filtros, $perPage);
+        $tipos = TipoUnidadCurricular::where('status_id', 1)->orderBy('nombre_tuc', 'asc')->get();
 
         return Inertia::render('EstructuraAcademica/Maestros/UnidadCurricular/index', [
-            'unidades' => $unidades,
-            'perPage'  => $perPage,
-            'filters'  => array_merge(
-                $request->only(['search', 'status', 'per_page', 'registros_per_page']),
-                ['per_page' => $perPage, 'registros_per_page' => $perPage]
-            ),
+            'unidades'     => $unidades,
+            'perPage'      => $perPage,
+            'tipos'        => $tipos,
+            'tipos_unidad' => $tipos,
+            'filters'      => $filtros,
         ]);
     }
 
@@ -68,37 +100,24 @@ class UnidadCurricularController extends Controller
      */
     public function store(Request $request): RedirectResponse
     {
-        $validated = $request->validate([
-            'codigo_unc'           => ['nullable', 'string', 'max:30'],
-            'nombre_unc'           => ['required', 'string', 'max:255'],
-            'tuc_id'               => ['required', 'integer', 'exists:tipo_unidad_curricular,id_tuc'],
-            'semestre_unc'         => ['required', 'integer', 'min:1', 'max:12'],
-            'tra_id'               => ['nullable', 'integer', 'exists:trayecto,id_tra'],
-            'unidades_credito_unc' => ['nullable', 'integer', 'min:0'],
-            'htea_unc'             => ['nullable', 'integer', 'min:0'],
-            'htei_unc'             => ['nullable', 'integer', 'min:0'],
-            'thte_unc'             => ['nullable', 'integer', 'min:0'],
-        ]);
+        $validated = $this->validarUnidad($request);
 
         try {
-            $htea = (int) ($validated['htea_unc'] ?? 3);
-            $htei = (int) ($validated['htei_unc'] ?? 3);
-            $thte = !empty($validated['thte_unc']) ? (int) $validated['thte_unc'] : ($htea + $htei);
+            $unidad = DB::transaction(function () use ($validated) {
+                $codigo = ! empty($validated['codigo_unc']) ? trim($validated['codigo_unc']) : null;
+                UnidadCurricular::liberarCodigoSiEliminado($codigo);
 
-            $unidad = UnidadCurricular::create([
-                'codigo_unc'           => !empty($validated['codigo_unc']) ? trim($validated['codigo_unc']) : null,
-                'nombre_unc'           => trim($validated['nombre_unc']),
-                'tuc_id'               => $validated['tuc_id'],
-                'semestre_unc'         => $validated['semestre_unc'],
-                'tra_id'               => $validated['tra_id'] ?? null,
-                'unidades_credito_unc' => $validated['unidades_credito_unc'] ?? 3,
-                'htea_unc'             => $htea,
-                'htei_unc'             => $htei,
-                'thte_unc'             => $thte,
-                'status_id'            => 1,
-                'status'               => true,
-                'created_id'           => auth()->id(),
-            ]);
+                return UnidadCurricular::create([
+                    'codigo_unc'          => $codigo,
+                    'codigo_anterior_unc' => ! empty($validated['codigo_anterior_unc']) ? trim($validated['codigo_anterior_unc']) : null,
+                    'nombre_unc'          => trim($validated['nombre_unc']),
+                    'tuc_id'              => $validated['tuc_id'],
+                    'dep_id'              => $validated['dep_id'] ?? null,
+                    'status_id'           => UnidadCurricular::STATUS_ACTIVO,
+                    'created_id'          => auth()->id(),
+                    'updated_id'          => auth()->id(),
+                ]);
+            });
 
             return redirect()
                 ->route('academico.unidad-curricular.index')
@@ -112,13 +131,15 @@ class UnidadCurricularController extends Controller
     }
 
     /**
-     * Muestra el detalle de una unidad curricular específica.
+     * Muestra el detalle de una unidad curricular específica junto a sus asignaciones en mallas y prelaciones.
      */
     public function show(int $id): Response
     {
-        $unidad = UnidadCurricular::with(['tipoUnidadCurricular', 'trayecto'])
-            ->where('id_unc', $id)
-            ->firstOrFail();
+        $unidad = UnidadCurricular::with([
+            'tipoUnidadCurricular',
+            'detallesMalla.trayecto',
+            'prelacionesExigidas.unidadOrigen',
+        ])->where('id_unc', $id)->firstOrFail();
 
         return Inertia::render('EstructuraAcademica/Maestros/UnidadCurricular/show', [
             'unidad' => $unidad,
@@ -130,7 +151,7 @@ class UnidadCurricularController extends Controller
      */
     public function edit(int $id): Response
     {
-        $unidad = UnidadCurricular::with(['tipoUnidadCurricular', 'trayecto'])
+        $unidad = UnidadCurricular::with(['tipoUnidadCurricular'])
             ->where('id_unc', $id)
             ->firstOrFail();
 
@@ -150,37 +171,25 @@ class UnidadCurricularController extends Controller
      */
     public function update(Request $request, int $id): RedirectResponse
     {
-        $validated = $request->validate([
-            'codigo_unc'           => ['nullable', 'string', 'max:30'],
-            'nombre_unc'           => ['required', 'string', 'max:255'],
-            'tuc_id'               => ['required', 'integer', 'exists:tipo_unidad_curricular,id_tuc'],
-            'semestre_unc'         => ['required', 'integer', 'min:1', 'max:12'],
-            'tra_id'               => ['nullable', 'integer', 'exists:trayecto,id_tra'],
-            'unidades_credito_unc' => ['nullable', 'integer', 'min:0'],
-            'htea_unc'             => ['nullable', 'integer', 'min:0'],
-            'htei_unc'             => ['nullable', 'integer', 'min:0'],
-            'thte_unc'             => ['nullable', 'integer', 'min:0'],
-        ]);
+        $validated = $this->validarUnidad($request, $id);
 
         try {
-            $unidad = UnidadCurricular::where('id_unc', $id)->firstOrFail();
+            $unidad = DB::transaction(function () use ($validated, $id) {
+                $unidad = UnidadCurricular::where('id_unc', $id)->firstOrFail();
+                $codigo = ! empty($validated['codigo_unc']) ? trim($validated['codigo_unc']) : null;
+                UnidadCurricular::liberarCodigoSiEliminado($codigo, $unidad->id_unc);
 
-            $htea = (int) ($validated['htea_unc'] ?? 3);
-            $htei = (int) ($validated['htei_unc'] ?? 3);
-            $thte = !empty($validated['thte_unc']) ? (int) $validated['thte_unc'] : ($htea + $htei);
+                $unidad->update([
+                    'codigo_unc'          => $codigo,
+                    'codigo_anterior_unc' => ! empty($validated['codigo_anterior_unc']) ? trim($validated['codigo_anterior_unc']) : null,
+                    'nombre_unc'          => trim($validated['nombre_unc']),
+                    'tuc_id'              => $validated['tuc_id'],
+                    'dep_id'              => $validated['dep_id'] ?? $unidad->dep_id,
+                    'updated_id'          => auth()->id(),
+                ]);
 
-            $unidad->update([
-                'codigo_unc'           => !empty($validated['codigo_unc']) ? trim($validated['codigo_unc']) : null,
-                'nombre_unc'           => trim($validated['nombre_unc']),
-                'tuc_id'               => $validated['tuc_id'],
-                'semestre_unc'         => $validated['semestre_unc'],
-                'tra_id'               => $validated['tra_id'] ?? null,
-                'unidades_credito_unc' => $validated['unidades_credito_unc'] ?? 3,
-                'htea_unc'             => $htea,
-                'htei_unc'             => $htei,
-                'thte_unc'             => $thte,
-                'updated_id'           => auth()->id(),
-            ]);
+                return $unidad;
+            });
 
             return redirect()
                 ->route('academico.unidad-curricular.index')
@@ -194,23 +203,52 @@ class UnidadCurricularController extends Controller
     }
 
     /**
-     * Realiza la baja lógica de la unidad curricular llamando a alternarEstatus($id, 2).
+     * Alterna el estatus lógico (`status_id` 1 <-> 2) sin eliminar de la interfaz.
+     */
+    public function toggleStatus(int $id): RedirectResponse
+    {
+        try {
+            $unidad = UnidadCurricular::where('id_unc', $id)->firstOrFail();
+            $nuevoEstado = UnidadCurricular::esStatusActivo($unidad)
+                ? UnidadCurricular::STATUS_INACTIVO
+                : UnidadCurricular::STATUS_ACTIVO;
+
+            UnidadCurricular::alternarEstatus($id, $nuevoEstado);
+
+            $estadoTexto = $nuevoEstado === UnidadCurricular::STATUS_ACTIVO ? 'activada' : 'inactivada';
+
+            return redirect()
+                ->back()
+                ->with('success', "La unidad curricular '{$unidad->nombre_unc}' ha sido {$estadoTexto} exitosamente.");
+        } catch (\Throwable $e) {
+            return redirect()
+                ->back()
+                ->withErrors(['error' => 'No se pudo cambiar el estatus de la unidad curricular: ' . $e->getMessage()]);
+        }
+    }
+
+    /**
+     * Ejecuta la eliminación lógica en interfaz (`deleted_at` + `status_id = 2`)
+     * preservando el registro histórico en PostgreSQL.
+     *
+     * Historial:
+     * - 2026-11-16: Reemplazada la mera inactivación (`alternarEstatus`) por `ejecutarBajaLogicaModelo`.
      */
     public function destroy(int $id): RedirectResponse
     {
         try {
-            $unidad = UnidadCurricular::where('id_unc', $id)->first();
-            $nombre = $unidad ? $unidad->nombre_unc : 'Unidad curricular';
+            $unidad = UnidadCurricular::where('id_unc', $id)->firstOrFail();
+            $nombre = $unidad->nombre_unc;
 
-            UnidadCurricular::alternarEstatus($id, 2);
+            UnidadCurricular::ejecutarBajaLogicaModelo($unidad, auth()->id(), UnidadCurricular::STATUS_INACTIVO);
 
             return redirect()
                 ->back()
-                ->with('success', "La unidad curricular '{$nombre}' ha sido dada de baja (inactivada) exitosamente.");
+                ->with('success', "La unidad curricular '{$nombre}' ha sido eliminada exitosamente.");
         } catch (\Throwable $e) {
             return redirect()
                 ->back()
-                ->withErrors(['error' => 'No se pudo dar de baja la unidad curricular: ' . $e->getMessage()]);
+                ->withErrors(['error' => 'No se pudo eliminar la unidad curricular: ' . $e->getMessage()]);
         }
     }
 }

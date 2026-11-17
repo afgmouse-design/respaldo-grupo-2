@@ -12,12 +12,8 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import Badge from '@/components/ui/badge/Badge.vue';
-import {
-    Layers,
-    Printer,
-    Search,
-    School,
-} from 'lucide-vue-next';
+import { Layers, Printer, Search } from 'lucide-vue-next';
+import { esActivo } from '@/lib/status';
 
 const props = defineProps<{
     secciones: {
@@ -42,9 +38,9 @@ const imprimir = () => {
 
 <template>
     <AppLayout :breadcrumbs="[
-        { title: 'Programación Académica', href: route('seccion.index') },
-        { title: 'Informes', href: route('informes.secciones') },
-        { title: 'Listado De Secciones', href: route('informes.secciones') },
+        { title: 'Programación Académica', subtitle: 'Secciones', href: route('seccion.index') },
+        { title: 'Informes', subtitle: 'Programación', href: route('informes.secciones') },
+        { title: 'Listado De Secciones', subtitle: 'Secciones', href: route('informes.secciones') },
     ]">
         <Head title="Listado De Secciones - SOGAC" />
 
@@ -106,7 +102,7 @@ const imprimir = () => {
                             </td>
                             <td class="p-4">
                                 <Badge variant="outline" class="text-xs">
-                                    {{ sec.tipo_seccion || 'Regular' }}
+                                    {{ sec.tipo_seccion?.nombre_tis || sec.tipo_seccion || 'Regular' }}
                                 </Badge>
                             </td>
                             <td class="p-4 text-xs text-muted-foreground">
@@ -119,17 +115,17 @@ const imprimir = () => {
                                 T{{ sec.trayecto_sec ?? 1 }} / S{{ sec.semestre_sec ?? 1 }}
                             </td>
                             <td class="p-4 text-center text-xs">
-                                {{ sec.turno_sec || 'Matutino' }}
+                                {{ sec.turno?.nombre_tur || sec.turno_sec || 'Matutino' }}
                             </td>
                             <td class="p-4 text-center font-mono font-bold">
                                 {{ sec.cupo_maximo_sec || 35 }}
                             </td>
                             <td class="p-4 text-center font-bold text-primary">
-                                {{ sec.unidades_docentes?.length || 0 }}
+                                {{ (sec.cargas_academicas ?? sec.unidades_docentes)?.length || 0 }}
                             </td>
                             <td class="p-4 text-center">
-                                <Badge :variant="sec.status ? 'default' : 'secondary'">
-                                    {{ sec.status ? 'Activa' : 'Inactiva' }}
+                                <Badge :variant="esActivo(sec) ? 'default' : 'secondary'">
+                                    {{ esActivo(sec) ? 'Activa' : 'Inactiva' }}
                                 </Badge>
                             </td>
                         </tr>

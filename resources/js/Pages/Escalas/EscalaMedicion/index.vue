@@ -26,6 +26,7 @@ import TabFilter from '@/components/ui/filters/TabFilter.vue';
 import { useDataFetching } from '@/composables/useDataFetching';
 import { useFlashAlert } from '@/composables/useFlashAlert';
 import { useConfirmDialog } from '@/composables/useConfirmDialog';
+import { esActivo } from '@/lib/status';
 import type { Column } from '@/types/dataTable';
 import type { BreadcrumbItem } from '@/types/navigation';
 import {
@@ -43,7 +44,8 @@ interface EscalaItem {
     nota_aprobatoria_esm: number;
     nota_minima_esm: number | null;
     nota_maxima_esm: number | null;
-    status: boolean;
+    status_id?: number;
+    status?: boolean;
     est_esm?: boolean;
     created_at?: string;
     updated_at?: string;
@@ -130,11 +132,8 @@ watch(
     { deep: true, immediate: true }
 );
 
-// Lectura reactiva directa del campo de estatus de la fila
-const isActivo = (row: any) => {
-    const val = row?.status ?? row?.est_esm;
-    return val === true || val === 1 || val === '1' || val === 'true';
-};
+// Lectura reactiva del campo status_id / estatus de la fila
+const isActivo = (row: any) => esActivo(row);
 
 // Alternar estatus con confirmación modal
 const toggleEstatus = async (row: EscalaItem) => {
@@ -287,11 +286,11 @@ const getEditRoute = (id: number) => {
                         </span>
                     </template>
 
-                    <!-- SLOT: ESTATUS (Interruptor reactivo con est_esm / status) -->
+                    <!-- SLOT: ESTATUS (Interruptor reactivo con status_id) -->
                     <template #status="{ row, item }">
                         <StatusSwitch
-                            :key="`escala-${(row || item)?.id_esm}-${((row || item)?.est_esm ?? (row || item)?.status)}`"
-                            :status="(row || item)?.est_esm ?? (row || item)?.status"
+                            :key="`escala-${(row || item)?.id_esm}-${(row || item)?.status_id ?? (row || item)?.status ?? (row || item)?.est_esm}`"
+                            :status="isActivo(row || item)"
                             @toggle="toggleEstatus(row || item)"
                         />
                     </template>

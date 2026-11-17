@@ -10,6 +10,7 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
+import { esActivo } from '@/lib/status';
 import type { BreadcrumbItem } from '@/types/navigation';
 import { ArrowLeft, Pencil, DoorClosed, CheckCircle2, XCircle } from 'lucide-vue-next';
 
@@ -19,6 +20,7 @@ const props = defineProps<{
         codigo_tia: string;
         nombre_tia: string;
         descripcion_tia?: string | null;
+        status_id?: number;
         status?: boolean;
         created_at?: string;
         updated_at?: string;
@@ -72,10 +74,10 @@ const breadcrumbs: BreadcrumbItem[] = [
                             <DoorClosed class="h-5 w-5 text-primary" />
                             <CardTitle class="text-lg font-semibold">{{ tipoAula.nombre_tia }}</CardTitle>
                         </div>
-                        <Badge :variant="tipoAula.status ? 'default' : 'secondary'" class="gap-1.5 py-1 px-3">
-                            <CheckCircle2 v-if="tipoAula.status" class="h-3.5 w-3.5" />
+                        <Badge :variant="esActivo(tipoAula) ? 'default' : 'secondary'" class="gap-1.5 py-1 px-3">
+                            <CheckCircle2 v-if="esActivo(tipoAula)" class="h-3.5 w-3.5" />
                             <XCircle v-else class="h-3.5 w-3.5" />
-                            {{ tipoAula.status ? 'Activo' : 'Inactivo' }}
+                            {{ esActivo(tipoAula) ? 'Activo' : 'Inactivo' }}
                         </Badge>
                     </div>
                     <CardDescription>Código de registro: #{{ tipoAula.id_tia }}</CardDescription>
@@ -100,7 +102,7 @@ const breadcrumbs: BreadcrumbItem[] = [
                         <div>
                             <span class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Estatus Operativo</span>
                             <p class="text-base font-medium mt-1">
-                                {{ tipoAula.status ? 'Disponible para asignación de aulas' : 'Inactivo' }}
+                                {{ esActivo(tipoAula) ? 'Disponible para asignación de aulas' : 'Inactivo' }}
                             </p>
                         </div>
 

@@ -13,50 +13,24 @@ import { Button } from '@/components/ui/button';
 import Badge from '@/components/ui/badge/Badge.vue';
 import {
     Calendar,
-    Clock,
     School,
     Layers,
-    Filter,
     Plus,
-    BookOpen,
     UserCheck,
     Printer,
-    Download,
     Trash2,
 } from 'lucide-vue-next';
 import AsignarHorarioUnificadoModal from './Partials/AsignarHorarioUnificadoModal.vue';
-
-interface HorarioItem {
-    id_sho: number;
-    dia_semana: number;
-    hora_inicio: string;
-    hora_fin: string;
-    tipo_sesion: string;
-    aula?: {
-        id_aul: number;
-        nombre_aul: string;
-        codigo_aula_aul?: string;
-    };
-    seccion_unidad_docente?: {
-        seccion?: {
-            id_sec: number;
-            nombre_sec: string;
-            codigo_sec?: string;
-        };
-        malla_curricular_detalle?: {
-            unidad_curricular?: {
-                id_unc: number;
-                nombre_unc: string;
-                codigo_unc: string;
-            };
-        };
-        docente?: {
-            id: number;
-            name: string;
-            email: string;
-        };
-    };
-}
+import {
+    coincideDiaHorario,
+    formatearHoraCorta,
+    obtenerAulaEtiqueta,
+    obtenerCodigoMateriaHorario,
+    obtenerNombreDocenteCarga,
+    obtenerNombreMateriaHorario,
+    obtenerSeccionHorario,
+    type DocenteSelectOption,
+} from '@/lib/academico';
 
 const props = defineProps<{
     secciones: Array<{
@@ -74,9 +48,9 @@ const props = defineProps<{
             }>;
         };
     }>;
-    aulas: Array<{ id_aul: number; nombre_aul: string; codigo_aula_aul: string }>;
-    docentes: Array<{ id: number; name: string; email: string; cedula?: string }>;
-    horarios: HorarioItem[];
+    aulas: Array<{ id_aul: number; codigo_aula_aul: string; nombre_aul?: string }>;
+    docentes: DocenteSelectOption[];
+    horarios: any[];
     filters: {
         seccion_id?: string | number;
         aula_id?: string | number;
@@ -118,8 +92,8 @@ const dias = [
     { id: 6, nombre: 'Sábado' },
 ];
 
-const getClasesPorDia = (diaId: number) => {
-    return props.horarios.filter(h => h.dia_semana === diaId);
+const getClasesPorDia = (diaId: number, diaNombre?: string) => {
+    return props.horarios.filter((h) => coincideDiaHorario(h, diaId, diaNombre));
 };
 </script>
 
@@ -195,7 +169,7 @@ const getClasesPorDia = (diaId: number) => {
                     >
                         <option value="">Todas las Aulas</option>
                         <option v-for="aul in props.aulas" :key="aul.id_aul" :value="aul.id_aul">
-                            {{ aul.nombre_aul }}
+                            {{ obtenerAulaEtiqueta(aul) }}
                         </option>
                     </select>
                 </div>
@@ -217,59 +191,59 @@ const getClasesPorDia = (diaId: number) => {
                     <div class="bg-muted/50 p-3 border-b text-center">
                         <h2 class="font-bold text-sm text-slate-900 dark:text-slate-100">{{ dia.nombre }}</h2>
                         <span class="text-[11px] text-muted-foreground">
-                            {{ getClasesPorDia(dia.id).length }} bloques asignados
+                            {{ getClasesPorDia(dia.id, dia.nombre).length }} bloques asignados
                         </span>
                     </div>
 
                     <div class="p-2 space-y-2 flex-1 overflow-y-auto max-h-[500px]">
                         <div
-                            v-for="item in getClasesPorDia(dia.id)"
-                            :key="item.id_sho"
+                            v-for="item in getClasesPorDia(dia.id, dia.nombre)"
+                            :key="item.id_hor ?? item.id_sho"
                             class="p-2.5 rounded-lg border bg-background text-xs space-y-1 border-l-4 border-l-primary shadow-2xs relative group"
                         >
                             <div class="flex items-center justify-between font-mono text-[11px] text-muted-foreground">
-                                <span class="font-bold text-foreground">{{ item.hora_inicio }} - {{ item.hora_fin }}</span>
+                                <span class="font-bold text-foreground">{{ formatearHoraCorta(item.hora_inicio_hor ?? item.hora_inicio) }} - {{ formatearHoraCorta(item.hora_fin_hor ?? item.hora_fin) }}</span>
                                 <Badge variant="outline" class="text-[10px] px-1 py-0">
-                                    {{ item.tipo_sesion || 'Teoría' }}
+                                    {{ item.tipo_sesion_hor || item.tipo_sesion || 'Teoría' }}
                                 </Badge>
                             </div>
 
                             <div class="font-bold text-slate-900 dark:text-slate-100 leading-tight">
-                                {{ item.seccion_unidad_docente?.malla_curricular_detalle?.unidad_curricular?.nombre_unc || 'Materia' }}
+                                {{ obtenerNombreMateriaHorario(item) }}
                                 <span class="text-[10px] text-muted-foreground block font-normal font-mono">
-                                    {{ item.seccion_unidad_docente?.malla_curricular_detalle?.unidad_curricular?.codigo_unc }}
+                                    {{ obtenerCodigoMateriaHorario(item) }}
                                 </span>
                             </div>
 
                             <div class="text-[11px] text-muted-foreground flex items-center gap-1">
                                 <Layers class="h-3 w-3 shrink-0" />
-                                <span>Sec: {{ item.seccion_unidad_docente?.seccion?.nombre_sec || 'N/A' }}</span>
+                                <span>Sec: {{ obtenerSeccionHorario(item) }}</span>
                             </div>
 
                             <div class="text-[11px] text-muted-foreground flex items-center gap-1">
                                 <UserCheck class="h-3 w-3 shrink-0" />
                                 <span class="font-medium text-slate-700 dark:text-slate-300">
-                                    Prof: {{ item.seccion_unidad_docente?.docente?.name || 'Por Asignar' }}
+                                    Prof: {{ obtenerNombreDocenteCarga(item.carga_academica ?? item.seccion_unidad_docente) }}
                                 </span>
                             </div>
 
                             <div class="flex items-center justify-between pt-1">
                                 <div class="text-[11px] font-semibold text-primary flex items-center gap-1">
                                     <School class="h-3 w-3 shrink-0" />
-                                    <span>{{ item.aula?.nombre_aul || 'Aula' }}</span>
+                                    <span>{{ obtenerAulaEtiqueta(item.aula) }}</span>
                                 </div>
                                 <button
                                     type="button"
                                     class="text-muted-foreground hover:text-destructive transition-colors p-1 rounded cursor-pointer"
                                     title="Eliminar este bloque"
-                                    @click="eliminarBloque(item.id_sho)"
+                                    @click="eliminarBloque(item.id_hor ?? item.id_sho)"
                                 >
                                     <Trash2 class="h-3.5 w-3.5" />
                                 </button>
                             </div>
                         </div>
 
-                        <div v-if="getClasesPorDia(dia.id).length === 0" class="text-center py-8 text-muted-foreground text-xs italic">
+                        <div v-if="getClasesPorDia(dia.id, dia.nombre).length === 0" class="text-center py-8 text-muted-foreground text-xs italic">
                             Sin clases este día
                         </div>
                     </div>

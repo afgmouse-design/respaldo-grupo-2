@@ -28,14 +28,13 @@ class EscalaMedicionController extends Controller
      */
     public function index(Request $request): Response
     {
-        // Autorización deshabilitada temporalmente para pruebas de CRUD
-        // $this->authorize('viewAny', EscalaMedicion::class);
+        $this->authorize('viewAny', EscalaMedicion::class);
 
         $perPage = (int) ($request->input('per_page') ?? $request->input('registros_per_page') ?? 10);
 
         // Delegación de consulta al modelo
         $escalas = EscalaMedicion::obtenerPaginados(
-            $request->only(['search', 'status', 'fecha_inicio', 'fecha_fin']),
+            $request->only(['search', 'status', 'status_id', 'fecha_inicio', 'fecha_fin']),
             $perPage
         );
 
@@ -43,7 +42,7 @@ class EscalaMedicionController extends Controller
             'escalas'  => $escalas,
             'perPage'  => $perPage,
             'filters'  => array_merge(
-                $request->only(['search', 'status', 'fecha_inicio', 'fecha_fin', 'per_page', 'registros_per_page']),
+                $request->only(['search', 'status', 'status_id', 'fecha_inicio', 'fecha_fin', 'per_page', 'registros_per_page']),
                 ['per_page' => $perPage, 'registros_per_page' => $perPage]
             ),
         ]);
@@ -54,7 +53,7 @@ class EscalaMedicionController extends Controller
      */
     public function create(): Response
     {
-        // $this->authorize('create', EscalaMedicion::class);
+        $this->authorize('create', EscalaMedicion::class);
 
         return Inertia::render('EstructuraAcademica/Maestros/EscalaMedicion/create');
     }
@@ -64,7 +63,7 @@ class EscalaMedicionController extends Controller
      */
     public function store(StoreEscalaMedicionRequest $request): RedirectResponse
     {
-        // $this->authorize('create', EscalaMedicion::class);
+        $this->authorize('create', EscalaMedicion::class);
 
         try {
             // Delegación de inserción al modelo con registrarEscalaMedicion()
@@ -86,9 +85,9 @@ class EscalaMedicionController extends Controller
      */
     public function show(int $id_esm): Response
     {
-        $escala = EscalaMedicion::obtenerConRelaciones($id_esm);
+        $this->authorize('view', EscalaMedicion::class);
 
-        // $this->authorize('view', $escala);
+        $escala = EscalaMedicion::obtenerConRelaciones($id_esm);
 
         return Inertia::render('EstructuraAcademica/Maestros/EscalaMedicion/show', [
             'escala' => $escala,
@@ -100,9 +99,9 @@ class EscalaMedicionController extends Controller
      */
     public function edit(int $id_esm): Response
     {
-        $escala = EscalaMedicion::obtenerParaEditar($id_esm);
+        $this->authorize('update', EscalaMedicion::class);
 
-        // $this->authorize('update', $escala);
+        $escala = EscalaMedicion::obtenerParaEditar($id_esm);
 
         return Inertia::render('EstructuraAcademica/Maestros/EscalaMedicion/edit', [
             'escala' => $escala,
@@ -114,7 +113,7 @@ class EscalaMedicionController extends Controller
      */
     public function update(UpdateEscalaMedicionRequest $request, int $id_esm): RedirectResponse
     {
-        // $this->authorize('update', $escalaPrev);
+        $this->authorize('update', EscalaMedicion::class);
 
         try {
             // Delegación de actualización al modelo con actualizarEscalaMedicion()
@@ -136,10 +135,10 @@ class EscalaMedicionController extends Controller
      */
     public function toggleStatus(int $id_esm): RedirectResponse
     {
-        // $this->authorize('delete', $escala);
+        $this->authorize('delete', EscalaMedicion::class);
 
         try {
-            $resultado = EscalaMedicion::alternarEstatus($id_esm, auth()->id());
+            $resultado = EscalaMedicion::alternarEstatus($id_esm, null, auth()->id());
 
             $estadoTexto = $resultado['estatus'] ? 'activada' : 'inactivada';
 
@@ -159,22 +158,26 @@ class EscalaMedicionController extends Controller
     }
 
     /**
-     * Realiza la baja lógica de la escala de medición asignando status_id = 2.
+     * Ejecuta la eliminación lógica en interfaz (`deleted_at` + `status_id = 2`)
+     * preservando el registro en PostgreSQL.
      *
-     * Actualización: Llamada explícita a alternarEstatus($id_esm, 2) para desactivar el registro y retorno con redirect()->back().
+     * Historial:
+     * - 2026-11-16: Reemplazada la mera inactivación (`alternarEstatus`) por `eliminarConSoftDelete`.
      */
     public function destroy(int $id_esm): RedirectResponse
     {
+        $this->authorize('delete', EscalaMedicion::class);
+
         try {
-            $resultado = EscalaMedicion::alternarEstatus($id_esm, 2, auth()->id());
+            $resultado = EscalaMedicion::eliminarConSoftDelete($id_esm, auth()->id());
 
             return redirect()
                 ->back()
-                ->with('success', "La escala de medición '{$resultado['nombre']}' ha sido dada de baja (inactivada) exitosamente.");
+                ->with('success', "La escala de medición '{$resultado['nombre']}' ha sido eliminada exitosamente.");
         } catch (\Throwable $e) {
             return redirect()
                 ->back()
-                ->withErrors(['error' => 'No se pudo dar de baja la escala de medición: ' . $e->getMessage()]);
+                ->withErrors(['error' => 'No se pudo eliminar la escala de medición: ' . $e->getMessage()]);
         }
     }
 }

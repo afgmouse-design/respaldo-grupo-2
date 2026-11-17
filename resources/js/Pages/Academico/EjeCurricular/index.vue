@@ -4,6 +4,9 @@
  *
  * Propósito: Página para consultar, buscar, filtrar y gestionar los Ejes Curriculares
  * registrados en el SOGAC siguiendo el diseño estándar de PNF / Trayecto / Sede.
+ *
+ * Historial:
+ *  - 2026-11-14: Alineado estatus real mediante `@/lib/status` (`esActivo`) eliminando texto fijo.
  */
 import { ref, watch, computed } from 'vue';
 import { Head, Link, router } from '@inertiajs/vue3';
@@ -18,6 +21,7 @@ import SearchFilter from '@/components/ui/filters/SearchFilter.vue';
 import TabFilter from '@/components/ui/filters/TabFilter.vue';
 import { useDataFetching } from '@/composables/useDataFetching';
 import { useFlashAlert } from '@/composables/useFlashAlert';
+import { esActivo } from '@/lib/status';
 import type { Column } from '@/types/dataTable';
 import type { BreadcrumbItem } from '@/types/navigation';
 import {
@@ -232,8 +236,11 @@ const eliminarRegistro = (ruta: string) => {
 
                     <!-- SLOT: ESTATUS -->
                     <template #status="{ row }">
-                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-400">
-                            Activo
+                        <span
+                            class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
+                            :class="esActivo(row) ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-400' : 'bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-400'"
+                        >
+                            {{ esActivo(row) ? 'Activo' : 'Inactivo' }}
                         </span>
                     </template>
 

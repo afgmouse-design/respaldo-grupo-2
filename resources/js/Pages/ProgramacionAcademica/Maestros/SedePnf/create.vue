@@ -2,32 +2,49 @@
 /**
  * Vista Standalone: Registrar Oferta Sede PNF (Programación Académica).
  *
- * Propósito: Vincular un programa nacional de formación (PNF) a una sede universitaria.
+ * Propósito: Vincular un programa académico (`programa`) a una sede universitaria en `sede_programa`.
+ * Historial:
+ *  - 2026-11-14: Alineado a `prg_id -> programa.id_prg`, `codigo_ministerio_spr` y `cantidad_asignados_spr`.
+ *  - 2026-11-16: Estandarización del pie de formulario con <CrudFormFooter />.
  */
 import { Head, Link, useForm } from '@inertiajs/vue3';
+import { ArrowLeft, Building2 } from 'lucide-vue-next';
+import { computed } from 'vue';
 import { route } from 'ziggy-js';
-import AppLayout from '@/layouts/AppLayout.vue';
 import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
+import CrudFormFooter from '@/components/ui/CrudFormFooter.vue';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import AppLayout from '@/layouts/AppLayout.vue';
+import {
+    obtenerCodigoPrograma,
+    obtenerIdPrograma,
+    obtenerNombrePrograma,
+} from '@/lib/academico';
+import type { ProgramaCatalogoItem } from '@/lib/academico';
 import type { BreadcrumbItem } from '@/types/navigation';
-import { ArrowLeft, Save, Building2 } from 'lucide-vue-next';
 
-defineProps<{
+const props = defineProps<{
     sedes: Array<{ id_sed: number; nombre_sed: string }>;
-    pnfs: Array<{ id_pnf: number; nombre_pnf: string; codigo_pnf?: string }>;
+    programas?: ProgramaCatalogoItem[];
+    pnfs?: ProgramaCatalogoItem[];
 }>();
+
+const catalogoProgramas = computed(() => props.programas ?? props.pnfs ?? []);
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Dashboard', subtitle: 'Panel Principal', href: route('dashboard') },
     { title: 'Programación Académica', subtitle: 'Maestros', href: '#' },
-    { title: 'Oferta Sede PNF', subtitle: 'Listado', href: route('sede_pnf.index') },
+    { title: 'Oferta Sede - Programa', subtitle: 'Listado', href: route('sede_pnf.index') },
     { title: 'Registrar Oferta', subtitle: 'Nuevo Registro', href: route('sede_pnf.create') },
 ];
 
 const form = useForm({
     sed_id: '',
-    pnf_id: '',
+    prg_id: '',
+    codigo_ministerio_spr: '',
+    cantidad_asignados_spr: '' as string | number,
 });
 
 const submit = () => {
@@ -95,35 +112,66 @@ const submit = () => {
                             </div>
 
                             <div class="space-y-2">
-                                <Label for="pnf_id">
-                                    Programa (PNF) <span class="text-destructive">*</span>
+                                <Label for="prg_id">
+                                    Programa Académico <span class="text-destructive">*</span>
                                 </Label>
                                 <select
-                                    id="pnf_id"
-                                    v-model="form.pnf_id"
+                                    id="prg_id"
+                                    v-model="form.prg_id"
                                     class="w-full h-10 rounded-md border border-input bg-background px-3 text-sm focus:outline-hidden focus:ring-2 focus:ring-ring"
-                                    :class="{ 'border-destructive': form.errors.pnf_id }"
+                                    :class="{ 'border-destructive': form.errors.prg_id || form.errors.pnf_id }"
                                 >
-                                    <option value="" disabled>Seleccione un PNF...</option>
-                                    <option v-for="p in pnfs" :key="p.id_pnf" :value="p.id_pnf">
-                                        {{ p.codigo_pnf ? `[${p.codigo_pnf}] ` : '' }}{{ p.nombre_pnf }}
+                                    <option value="" disabled>Seleccione un programa...</option>
+                                    <option v-for="p in catalogoProgramas" :key="obtenerIdPrograma(p)" :value="obtenerIdPrograma(p)">
+                                        {{ obtenerCodigoPrograma(p) ? `[${obtenerCodigoPrograma(p)}] ` : '' }}{{ obtenerNombrePrograma(p) }}
                                     </option>
                                 </select>
-                                <span v-if="form.errors.pnf_id" class="text-xs text-destructive">
-                                    {{ form.errors.pnf_id }}
+                                <span v-if="form.errors.prg_id || form.errors.pnf_id" class="text-xs text-destructive">
+                                    {{ form.errors.prg_id || form.errors.pnf_id }}
+                                </span>
+                            </div>
+
+                            <div class="space-y-2">
+                                <Label for="codigo_ministerio_spr">
+                                    Código Ministerio (Opcional)
+                                </Label>
+                                <Input
+                                    id="codigo_ministerio_spr"
+                                    v-model="form.codigo_ministerio_spr"
+                                    type="text"
+                                    maxlength="5"
+                                    placeholder="Ej. 00123"
+                                    :class="{ 'border-destructive': form.errors.codigo_ministerio_spr }"
+                                />
+                                <span v-if="form.errors.codigo_ministerio_spr" class="text-xs text-destructive">
+                                    {{ form.errors.codigo_ministerio_spr }}
+                                </span>
+                            </div>
+
+                            <div class="space-y-2">
+                                <Label for="cantidad_asignados_spr">
+                                    Cantidad Asignados OPSU (Opcional)
+                                </Label>
+                                <Input
+                                    id="cantidad_asignados_spr"
+                                    v-model="form.cantidad_asignados_spr"
+                                    type="number"
+                                    min="0"
+                                    placeholder="0"
+                                    :class="{ 'border-destructive': form.errors.cantidad_asignados_spr }"
+                                />
+                                <span v-if="form.errors.cantidad_asignados_spr" class="text-xs text-destructive">
+                                    {{ form.errors.cantidad_asignados_spr }}
                                 </span>
                             </div>
                         </div>
                     </CardContent>
 
-                    <CardFooter class="flex justify-end gap-3 border-t border-slate-100 dark:border-slate-800/60 pt-4">
-                        <Button as-child variant="outline" :disabled="form.processing">
-                            <Link :href="route('sede_pnf.index')">Cancelar</Link>
-                        </Button>
-                        <Button type="submit" :disabled="form.processing" class="gap-2">
-                            <Save class="h-4 w-4" />
-                            <span>{{ form.processing ? 'Guardando...' : 'Habilitar Oferta' }}</span>
-                        </Button>
+                    <CardFooter class="border-t border-slate-100 bg-muted/20 px-6 py-4 dark:border-slate-800/60">
+                        <CrudFormFooter
+                            :cancel-href="route('sede_pnf.index')"
+                            :processing="form.processing"
+                        />
                     </CardFooter>
                 </form>
             </Card>

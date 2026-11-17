@@ -1,47 +1,55 @@
 <script setup lang="ts">
 /**
- * Vista de Listado: Gestión de Tipos de Período (Módulo: Estructura Académica).
+ * Vista de Listado: Gestión de Tipos de Lapso / Período (Módulo: Estructura Académica).
  *
- * Propósito: Muestra el catálogo de tipos de período académico (semestres, trayectos, trimestres, etc.)
- * permitiendo búsqueda, filtrado, paginación y acciones directas sobre cada registro.
+ * Propósito: Muestra el catálogo de `tipo_lapso` permitiendo búsqueda, filtrado,
+ * paginación y acciones directas sobre cada registro.
  *
- * Actualización (Interruptor de Estado - StatusSwitch):
- * Se incorporó el suiche interactivo en la columna de Estatus para activar y desactivar
- * tipos de período directamente con confirmación modal.
+ * Historial:
+ *  - 2026-11-14: Alineado a `tipo_lapso` (`id_tla`, `codigo_tla`, `nombre_tla`, `nomenclatura_tla`,
+ *    `duracion_semanas_tla`, `descripcion_tla`, `status_id`) mediante `@/lib/status`.
+ *  - 2026-11-16: Estandarización de acciones de tabla con <CrudActionButtons />.
  */
-import { ref, computed } from 'vue';
 import { Head, Link, router } from '@inertiajs/vue3';
+import { Calendar, Plus, X } from 'lucide-vue-next';
+import { computed } from 'vue';
 import { route } from 'ziggy-js';
-import { Plus, X, Eye, Pencil, Trash2, Calendar } from 'lucide-vue-next';
 
 // Layout e UI Reutilizable
-import AppLayout from '@/layouts/AppLayout.vue';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableEmpty } from '@/components/ui/table';
-import DataPagination from '@/components/ui/DataPagination.vue';
-import SuccessAlert from '@/components/ui/SuccessAlert.vue';
 import Badge from '@/components/ui/badge/Badge.vue';
-import StatusSwitch from '@/components/ui/StatusSwitch.vue';
 import { Button } from '@/components/ui/button';
-import TableSkeleton from '@/components/ui/TableSkeleton.vue';
-
-// Filtros
+import CrudActionButtons from '@/components/ui/CrudActionButtons.vue';
+import DataPagination from '@/components/ui/DataPagination.vue';
 import SearchFilter from '@/components/ui/filters/SearchFilter.vue';
 import TabFilter from '@/components/ui/filters/TabFilter.vue';
+import StatusSwitch from '@/components/ui/StatusSwitch.vue';
+import SuccessAlert from '@/components/ui/SuccessAlert.vue';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableEmpty } from '@/components/ui/table';
+import TableSkeleton from '@/components/ui/TableSkeleton.vue';
 
 // Composables y Tipos
+import { useConfirmDialog } from '@/composables/useConfirmDialog';
 import { useDataFetching } from '@/composables/useDataFetching';
 import { useFlashAlert } from '@/composables/useFlashAlert';
-import { useConfirmDialog } from '@/composables/useConfirmDialog';
+import AppLayout from '@/layouts/AppLayout.vue';
+import { esActivo } from '@/lib/status';
 import type { BreadcrumbItem } from '@/types/navigation';
 
 export interface TipoPeriodoItem {
+    id_tla?: number;
     id_tpd: number;
+    nombre_tla?: string;
     nombre_tpd: string;
+    codigo_tla?: string | null;
     codigo_tpd?: string | null;
+    nomenclatura_tla?: string | null;
     nomenclatura?: string | null;
+    duracion_semanas_tla?: number | null;
     duracion_semanas_tpd?: number | null;
+    descripcion_tla?: string | null;
     descripcion_tpd?: string | null;
-    status: boolean;
+    status_id?: number;
+    status?: boolean;
     est_tpd?: boolean;
     created_at?: string;
     updated_at?: string;
@@ -116,29 +124,29 @@ const cambiarPorPagina = (nuevaCantidad: string | number) => {
     changePerPage(String(nuevaCantidad));
 };
 
-// Utilidad para evaluar el estatus booleano
-const isActivo = (item: any) => {
-    const val = item?.est_tpd ?? item?.status;
-    return val === true || val === 1 || val === '1' || val === 'true';
-};
+const isActivo = (item: unknown) => esActivo(item);
+
+const obtenerId = (item: TipoPeriodoItem) => item.id_tla ?? item.id_tpd;
 
 const handleToggleStatus = async (item: TipoPeriodoItem) => {
+    const id = obtenerId(item);
+    const nombre = item.nombre_tla ?? item.nombre_tpd;
     const activo = isActivo(item);
     const accion = activo ? 'desactivar' : 'activar';
-    if (await confirmDialog(`¿Está seguro de que desea ${accion} el tipo de período "${item.nombre_tpd}"?`, `Confirmar ${accion}`)) {
+    if (await confirmDialog(`¿Está seguro de que desea ${accion} el tipo de período "${nombre}"?`, `Confirmar ${accion}`)) {
         if (route().has('academico.tipo-periodo.toggle_status')) {
-            router.patch(route('academico.tipo-periodo.toggle_status', item.id_tpd), {}, { preserveScroll: true });
+            router.patch(route('academico.tipo-periodo.toggle_status', id), {}, { preserveScroll: true });
         } else {
-            router.delete(route('semestres.destroy', item.id_tpd), { preserveScroll: true });
+            router.delete(route('semestres.destroy', id), { preserveScroll: true });
         }
     }
 };
 
-// Función para eliminar registro con confirmación modal
-const eliminarRegistro = async (ruta: string) => {
-    if (await confirmDialog('¿Estás seguro de que deseas eliminar este registro? Desaparecerá de la lista.')) {
-        router.delete(ruta);
+const getCreateRoute = () => {
+    if (route().has('academico.tipo-periodo.create')) {
+        return route('academico.tipo-periodo.create');
     }
+    return route('semestres.create');
 };
 
 const getEditRoute = (id_tpd: number) => {
@@ -148,11 +156,11 @@ const getEditRoute = (id_tpd: number) => {
     return route('semestres.edit', id_tpd);
 };
 
-const getShowRoute = (id_tpd: number) => {
-    if (route().has('academico.tipo-periodo.show')) {
-        return route('academico.tipo-periodo.show', id_tpd);
+const getDeleteRoute = (id_tpd: number) => {
+    if (route().has('academico.tipo-periodo.destroy')) {
+        return route('academico.tipo-periodo.destroy', id_tpd);
     }
-    return null;
+    return route('semestres.destroy', id_tpd);
 };
 </script>
 
@@ -187,9 +195,9 @@ const getShowRoute = (id_tpd: number) => {
                 </div>
 
                 <div class="flex items-center gap-2">
-                    <Button as-child size="default" class="shadow-sm">
-                        <Link :href="route('academico.tipo-periodo.create')">
-                            <Plus class="h-4 w-4 mr-2" />
+                    <Button as-child size="default" class="gap-2 shadow-sm">
+                        <Link :href="getCreateRoute()">
+                            <Plus class="h-4 w-4" />
                             Nuevo Tipo de Período
                         </Link>
                     </Button>
@@ -256,7 +264,7 @@ const getShowRoute = (id_tpd: number) => {
                             <TableHead class="text-slate-500 dark:text-slate-400 font-semibold text-xs uppercase tracking-wider py-3.5 px-4 h-auto text-center">Duración (Semanas)</TableHead>
                             <TableHead class="text-slate-500 dark:text-slate-400 font-semibold text-xs uppercase tracking-wider py-3.5 px-4 h-auto">Descripción</TableHead>
                             <TableHead class="text-slate-500 dark:text-slate-400 font-semibold text-xs uppercase tracking-wider py-3.5 px-4 h-auto text-center w-40">Estatus</TableHead>
-                            <TableHead class="text-slate-500 dark:text-slate-400 font-semibold text-xs uppercase tracking-wider py-3.5 px-4 h-auto text-center">Acciones</TableHead>
+                            <TableHead class="text-slate-500 dark:text-slate-400 font-semibold text-xs uppercase tracking-wider py-3.5 px-4 h-auto text-center w-36">Acciones</TableHead>
                         </TableRow>
                     </TableHeader>
 
@@ -309,52 +317,20 @@ const getShowRoute = (id_tpd: number) => {
 
                             <TableCell class="py-3 px-4 text-center">
                                 <StatusSwitch
-                                    :status="item.est_tpd ?? item.status"
+                                    :status="isActivo(item)"
                                     @toggle="handleToggleStatus(item)"
                                 />
                             </TableCell>
 
                             <TableCell class="py-3 px-4 text-center">
-                                <div class="flex items-center justify-center gap-1.5">
-                                    <!-- Botón Ver Detalle -->
-                                    <Button
-                                        v-if="getShowRoute(item.id_tpd)"
-                                        as-child
-                                        variant="ghost"
-                                        size="icon"
-                                        class="h-8 w-8 text-slate-600 hover:text-primary dark:text-slate-400"
-                                        title="Ver tipo de período"
-                                    >
-                                        <Link :href="getShowRoute(item.id_tpd)!">
-                                            <Eye class="h-4 w-4" />
-                                        </Link>
-                                    </Button>
-
-                                    <!-- Botón Editar -->
-                                    <Button
-                                        as-child
-                                        variant="ghost"
-                                        size="icon"
-                                        class="h-8 w-8 text-amber-600 hover:text-amber-700 dark:text-amber-400"
-                                        title="Editar tipo de período"
-                                    >
-                                        <Link :href="getEditRoute(item.id_tpd)">
-                                            <Pencil class="h-4 w-4" />
-                                        </Link>
-                                    </Button>
-
-                                    <!-- Botón Eliminar -->
-                                    <Button
-                                        type="button"
-                                        variant="ghost"
-                                        size="icon"
-                                        class="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
-                                        title="Eliminar tipo de período"
-                                        @click="eliminarRegistro(route().has('academico.tipo-periodo.destroy') ? route('academico.tipo-periodo.destroy', item.id_tpd) : route('semestres.destroy', item.id_tpd))"
-                                    >
-                                        <Trash2 class="h-4 w-4" />
-                                    </Button>
-                                </div>
+                                <CrudActionButtons
+                                    :show-view="false"
+                                    :edit-href="getEditRoute(obtenerId(item))"
+                                    :delete-href="getDeleteRoute(obtenerId(item))"
+                                    :record-id="obtenerId(item)"
+                                    :record-name="item.nombre_tla ?? item.nombre_tpd"
+                                    confirm-message="¿Estás seguro de que deseas eliminar este registro? Desaparecerá de la lista."
+                                />
                             </TableCell>
                         </TableRow>
 

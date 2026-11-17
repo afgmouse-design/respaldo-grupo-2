@@ -4,24 +4,23 @@
  *
  * Propósito: Página independiente con formulario precargado para modificar
  * los datos de un estado existente y/o reasignar su país padre. Cumple estrictamente la regla de CERO MODALES.
+ *
+ * Historial:
+ * - 2026-11-16: Estandarización del pie de formulario con <CrudFormFooter />.
  */
 import { Head, Link, useForm } from '@inertiajs/vue3';
+import { AlertCircle, ArrowLeft, Eye, MapPin } from 'lucide-vue-next';
 import { route } from 'ziggy-js';
-import AppLayout from '@/layouts/AppLayout.vue';
+import Badge from '@/components/ui/badge/Badge.vue';
 import { Button } from '@/components/ui/button';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
+import CrudFormFooter from '@/components/ui/CrudFormFooter.vue';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import Badge from '@/components/ui/badge/Badge.vue';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
-import type { BreadcrumbItem } from '@/types/navigation';
+import AppLayout from '@/layouts/AppLayout.vue';
+import { esActivo, resolverStatusId } from '@/lib/status';
 import { formatNombre } from '@/lib/utils';
-import {
-    MapPin,
-    ArrowLeft,
-    Save,
-    AlertCircle,
-    Eye,
-} from 'lucide-vue-next';
+import type { BreadcrumbItem } from '@/types/navigation';
 
 interface PaisRef {
     id_pai: number;
@@ -31,8 +30,10 @@ interface PaisRef {
 interface EstadoModel {
     id_esd: number;
     nombre_esd: string;
+    iso_esd?: string | null;
     pai_id: number;
-    status: boolean;
+    status_id?: number;
+    status?: boolean | number;
     created_at?: string;
     updated_at?: string;
 }
@@ -51,8 +52,9 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 const form = useForm({
     nombre_esd: props.estado.nombre_esd,
+    iso_esd: props.estado.iso_esd ?? '',
     pai_id: props.estado.pai_id,
-    status: props.estado.status,
+    status_id: resolverStatusId(props.estado),
 });
 
 const submit = () => {
@@ -79,8 +81,8 @@ const submit = () => {
                         <h1 class="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
                             Editar Estado: {{ props.estado.nombre_esd }}
                         </h1>
-                        <Badge :variant="props.estado.status ? 'successCustom' : 'destructiveCustom'" class="ml-2">
-                            {{ props.estado.status ? 'Activo' : 'Inactivo' }}
+                        <Badge :variant="esActivo(props.estado) ? 'successCustom' : 'destructiveCustom'" class="ml-2">
+                            {{ esActivo(props.estado) ? 'Activo' : 'Inactivo' }}
                         </Badge>
                     </div>
                     <p class="text-sm text-muted-foreground ml-10">
@@ -170,7 +172,26 @@ const submit = () => {
                             </p>
                         </div>
 
-                        <!-- CAMPO: ESTATUS -->
+                        <!-- CAMPO: CÓDIGO ISO DEL ESTADO (`iso_esd`) -->
+                        <div class="space-y-2">
+                            <Label for="iso_esd" class="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                                Código ISO (Opcional)
+                            </Label>
+                            <Input
+                                id="iso_esd"
+                                v-model="form.iso_esd"
+                                type="text"
+                                placeholder="Ej: VE-P"
+                                maxlength="10"
+                                :class="{ 'border-destructive focus-visible:ring-destructive/20': form.errors.iso_esd }"
+                                autocomplete="off"
+                            />
+                            <p v-if="form.errors.iso_esd" class="text-xs text-destructive font-medium">
+                                {{ form.errors.iso_esd }}
+                            </p>
+                        </div>
+
+                        <!-- CAMPO: ESTATUS (`status_id`) -->
                         <div class="space-y-2 pt-2 border-t dark:border-slate-800">
                             <Label for="status" class="text-sm font-semibold text-slate-700 dark:text-slate-300">
                                 Estatus Operativo
@@ -180,29 +201,25 @@ const submit = () => {
                                     <input
                                         id="status"
                                         type="checkbox"
-                                        v-model="form.status"
+                                        :checked="form.status_id === 1"
+                                        @change="form.status_id = ($event.target as HTMLInputElement).checked ? 1 : 2"
                                         class="sr-only peer"
                                     />
                                     <div class="w-11 h-6 bg-slate-200 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600 dark:bg-slate-700"></div>
                                     <span class="ml-3 text-sm font-medium text-slate-700 dark:text-slate-300">
-                                        {{ form.status ? 'Registro Activo' : 'Registro Inactivo' }}
+                                        {{ form.status_id === 1 ? 'Registro Activo' : 'Registro Inactivo' }}
                                     </span>
                                 </label>
                             </div>
                         </div>
                     </CardContent>
 
-                    <CardFooter class="flex items-center justify-end gap-3 border-t bg-muted/20 px-6 py-4">
-                        <Button as-child variant="outline">
-                            <Link :href="route('geografia.estado.index')">
-                                Cancelar
-                            </Link>
-                        </Button>
-
-                        <Button type="submit" :disabled="form.processing" class="shadow-xs">
-                            <Save class="h-4 w-4 mr-2" />
-                            {{ form.processing ? 'Guardando...' : 'Actualizar' }}
-                        </Button>
+                    <CardFooter class="border-t border-slate-100 bg-muted/20 px-6 py-4 dark:border-slate-800/60">
+                        <CrudFormFooter
+                            :cancel-href="route('geografia.estado.index')"
+                            :is-edit="true"
+                            :processing="form.processing"
+                        />
                     </CardFooter>
                 </form>
             </Card>

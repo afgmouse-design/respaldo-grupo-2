@@ -160,12 +160,16 @@ class ParroquiaController extends Controller
     }
 
     /**
-     * Realiza la baja lógica de la parroquia y propaga la desactivación en cascada a sus localidades asociadas.
+     * Ejecuta la eliminación lógica en interfaz (`deleted_at` + `status_id = 2`)
+     * propagando la baja a localidades sin borrar registros físicos de BD.
+     *
+     * Historial:
+     * - 2026-11-16: Reemplazada la mera inactivación (`desactivarConCascada`) por `eliminarConCascada`.
      */
     public function destroy(int $id_par): RedirectResponse
     {
         try {
-            $resultado = Parroquia::desactivarConCascada($id_par, auth()->id());
+            $resultado = Parroquia::eliminarConCascada($id_par, auth()->id());
 
             return redirect()
                 ->back()

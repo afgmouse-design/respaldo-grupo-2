@@ -1,13 +1,19 @@
 <script setup lang="ts">
 /**
  * Vista Standalone: Detalle de Trayecto (Módulo: Estructura Académica / Régimen).
+ *
+ * Historial:
+ *  - 2026-11-14: Alineado a `sogac_mio.sql` (`tla_id`, `tipo_lapso.nombre_tla`, `status_id` vía
+ *    `@/lib/status` y `users.username`).
  */
+import { computed } from 'vue';
 import { Head, Link } from '@inertiajs/vue3';
 import { route } from 'ziggy-js';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { Button } from '@/components/ui/button';
 import Badge from '@/components/ui/badge/Badge.vue';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
+import { esActivo } from '@/lib/status';
 import type { BreadcrumbItem } from '@/types/navigation';
 import {
     GraduationCap,
@@ -19,10 +25,10 @@ import {
     Sliders,
 } from 'lucide-vue-next';
 
-interface TipoPeriodoItem {
-    id_tpd: number;
-    nombre_tpd: string;
-    codigo_tpd?: string;
+interface TipoLapsoItem {
+    id_tla: number;
+    nombre_tla: string;
+    codigo_tla?: string;
 }
 
 interface TrayectoDetalle {
@@ -30,19 +36,21 @@ interface TrayectoDetalle {
     codigo_tra?: string;
     nombre_tra: string;
     numero_orden_tra: number;
-    tpd_id: number;
-    tipo_periodo?: TipoPeriodoItem | null;
-    status: boolean;
-    est_tra?: boolean;
+    tla_id: number;
+    nombre_tla?: string | null;
+    tipo_lapso?: TipoLapsoItem | null;
+    status_id?: number;
     created_at?: string;
     updated_at?: string;
-    creador?: { id: number; name: string; email: string } | null;
-    actualizador?: { id: number; name: string; email: string } | null;
+    creador?: { id: number; username?: string; name?: string; email: string } | null;
+    actualizador?: { id: number; username?: string; name?: string; email: string } | null;
 }
 
 const props = defineProps<{
     trayecto: TrayectoDetalle;
 }>();
+
+const activo = computed(() => esActivo(props.trayecto));
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Dashboard', subtitle: 'Panel Principal', href: route('dashboard') },
@@ -69,8 +77,8 @@ const breadcrumbs: BreadcrumbItem[] = [
                         <h1 class="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
                             {{ trayecto.nombre_tra }}
                         </h1>
-                        <Badge :variant="trayecto.status ? 'default' : 'secondary'" class="ml-2">
-                            {{ trayecto.status ? 'Activo' : 'Inactivo' }}
+                        <Badge :variant="activo ? 'default' : 'secondary'" class="ml-2">
+                            {{ activo ? 'Activo' : 'Inactivo' }}
                         </Badge>
                     </div>
                     <p class="text-sm text-muted-foreground ml-10">
@@ -95,7 +103,7 @@ const breadcrumbs: BreadcrumbItem[] = [
                         <CardDescription class="text-xs uppercase font-semibold">Modalidad Académica</CardDescription>
                         <CardTitle class="text-xl font-bold text-primary flex items-center gap-2 mt-1">
                             <Calendar class="h-5 w-5" />
-                            {{ trayecto.tipo_periodo?.nombre_tpd || 'No asignada' }}
+                            {{ trayecto.tipo_lapso?.nombre_tla || trayecto.nombre_tla || 'No asignada' }}
                         </CardTitle>
                     </CardHeader>
                     <CardContent class="text-xs text-muted-foreground">
@@ -144,7 +152,7 @@ const breadcrumbs: BreadcrumbItem[] = [
                         <div>
                             <p class="text-xs text-muted-foreground">Registrado por</p>
                             <p class="font-medium text-foreground">
-                                {{ trayecto.creador ? trayecto.creador.name : 'Sistema / Inicial' }}
+                                {{ trayecto.creador ? (trayecto.creador.username ?? trayecto.creador.name) : 'Sistema / Inicial' }}
                             </p>
                         </div>
                     </div>
@@ -164,7 +172,7 @@ const breadcrumbs: BreadcrumbItem[] = [
                         <div>
                             <p class="text-xs text-muted-foreground">Última modificación por</p>
                             <p class="font-medium text-foreground">
-                                {{ trayecto.actualizador ? trayecto.actualizador.name : (trayecto.creador ? trayecto.creador.name : 'Sin cambios') }}
+                                {{ trayecto.actualizador ? (trayecto.actualizador.username ?? trayecto.actualizador.name) : (trayecto.creador ? (trayecto.creador.username ?? trayecto.creador.name) : 'Sin cambios') }}
                             </p>
                         </div>
                     </div>

@@ -25,11 +25,12 @@ interface SeccionItem {
     id_sec: number;
     nombre_sec: string;
     codigo_sec?: string | null;
-    tipo_seccion?: string | null;
+    tipo_seccion?: string | { nombre_tis?: string } | null;
     semestre_sec?: number | null;
     trayecto_sec?: number | null;
     cupo_maximo_sec?: number | null;
-    status: boolean;
+    status_id?: number;
+    status?: boolean;
     malla_curricular?: {
         nombre_mac: string;
     };
@@ -54,7 +55,7 @@ const buscar = () => {
 
 const cerrarSeccion = (id: number, nombre: string) => {
     if (confirm(`¿Confirma que desea CERRAR la sección '${nombre}'? Los estudiantes no podrán inscribirse.`)) {
-        router.post(route('seccion.cambiar_estado', id), { status: false });
+        router.post(route('seccion.cambiar_estado', id), { status_id: 2 });
     }
 };
 </script>

@@ -16,6 +16,7 @@ import StatusSwitch from '@/components/ui/StatusSwitch.vue';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { useConfirmDialog } from '@/composables/useConfirmDialog';
 import type { BreadcrumbItem } from '@/types/navigation';
+import { esActivo, resolverStatusId } from '@/lib/status';
 import {
     MapPin,
     ArrowLeft,
@@ -33,7 +34,8 @@ import {
 interface MunicipioSubordinado {
     id_mun: number;
     nombre_mun: string;
-    status: boolean;
+    status_id?: number;
+    status?: boolean | number;
     parroquias_count?: number;
     created_at?: string;
 }
@@ -46,8 +48,10 @@ interface PaisRef {
 interface EstadoModel {
     id_esd: number;
     nombre_esd: string;
+    iso_esd?: string | null;
     pai_id: number;
-    status: boolean;
+    status_id?: number;
+    status?: boolean | number;
     created_at?: string;
     updated_at?: string;
     pais?: PaisRef;
@@ -79,14 +83,14 @@ const formatDate = (isoString?: string) => {
 };
 
 const toggleEstatus = async () => {
-    const accion = props.estado.status ? 'desactivar' : 'activar';
+    const accion = esActivo(props.estado) ? 'desactivar' : 'activar';
     if (await confirmDialog(`¿Está seguro de que desea ${accion} el estado "${props.estado.nombre_esd}"?`)) {
-        router.delete(route('geografia.estado.destroy', props.estado.id_esd));
+        router.patch(route('geografia.estado.status', props.estado.id_esd), {}, { preserveScroll: true });
     }
 };
 
 const toggleEstatusMunicipio = async (mun: MunicipioSubordinado) => {
-    const accion = mun.status ? 'desactivar' : 'activar';
+    const accion = esActivo(mun) ? 'desactivar' : 'activar';
     if (await confirmDialog(`¿Está seguro de que desea ${accion} el municipio "${mun.nombre_mun}"?`)) {
         router.patch(route('geografia.municipio.status', mun.id_mun), {}, { preserveScroll: true });
     }
@@ -109,11 +113,12 @@ const toggleEstatusMunicipio = async (mun: MunicipioSubordinado) => {
                         </Button>
                         <h1 class="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100 flex items-center gap-3">
                             <span>{{ props.estado.nombre_esd }}</span>
-                            <StatusSwitch :status="props.estado.status" @toggle="toggleEstatus" />
+                            <StatusSwitch :status="resolverStatusId(props.estado)" @toggle="toggleEstatus" />
                         </h1>
                     </div>
                     <p class="text-sm text-muted-foreground ml-10 flex items-center gap-2">
                         <span>Código territorial: #{{ props.estado.id_esd }}</span>
+                        <span v-if="props.estado.iso_esd">• ISO: {{ props.estado.iso_esd }}</span>
                         <span>•</span>
                         <span v-if="props.estado.pais" class="flex items-center gap-1 font-medium text-slate-700 dark:text-slate-300">
                             <Globe class="h-3.5 w-3.5 text-muted-foreground" />
@@ -135,11 +140,11 @@ const toggleEstatusMunicipio = async (mun: MunicipioSubordinado) => {
                     <Button
                         variant="outline"
                         size="sm"
-                        :class="props.estado.status ? 'text-red-600 hover:text-red-700' : 'text-emerald-600 hover:text-emerald-700'"
+                        :class="esActivo(props.estado) ? 'text-red-600 hover:text-red-700' : 'text-emerald-600 hover:text-emerald-700'"
                         @click="toggleEstatus"
                     >
                         <Power class="h-4 w-4 mr-2" />
-                        {{ props.estado.status ? 'Desactivar' : 'Activar' }}
+                        {{ esActivo(props.estado) ? 'Desactivar' : 'Activar' }}
                     </Button>
                 </div>
             </div>
@@ -260,7 +265,7 @@ const toggleEstatusMunicipio = async (mun: MunicipioSubordinado) => {
                                     </td>
                                     <td class="px-6 py-4 text-center">
                                         <div class="flex items-center justify-center">
-                                            <StatusSwitch :status="mun.status" @toggle="toggleEstatusMunicipio(mun)" />
+                                            <StatusSwitch :status="resolverStatusId(mun)" @toggle="toggleEstatusMunicipio(mun)" />
                                         </div>
                                     </td>
                                 </tr>

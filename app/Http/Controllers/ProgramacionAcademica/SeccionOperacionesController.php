@@ -1,77 +1,92 @@
 <?php
 
+/**
+ * Propósito: Controlador de Operaciones Específicas de Secciones (Carga Académica, Apertura, Cierre, Capacidad y Tipos).
+ * Historial: Actualizado para consultar `CargaAcademica` (`pep_id`), `TipoSeccion`, `Aula`, `PersonaPerfil::obtenerDocentesActivosParaSelect()` y utilizar exclusivamente `status_id` (`1`/`2`).
+ */
+
 namespace App\Http\Controllers\ProgramacionAcademica;
 
 use App\Http\Controllers\Controller;
+use App\Models\Personas\PersonaPerfil;
+use App\Models\ProgramacionAcademica\CargaAcademica;
+use App\Models\ProgramacionAcademica\Maestros\Aula;
 use App\Models\ProgramacionAcademica\Maestros\Seccion;
-use App\Models\ProgramacionAcademica\SeccionUnidadDocente;
-use App\Models\EstructuraAcademica\Maestros\MallaCurricularDetalle;
-use App\Models\User;
+use App\Models\ProgramacionAcademica\Maestros\TipoSeccion;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
-/**
- * Controlador de Operaciones Específicas de Secciones (SUD, Apertura, Cierre, Capacidad y Tipos).
- *
- * Propósito: Gestionar cada subflujo del ciclo de vida de las secciones de manera modular e independiente,
- * garantizando que cada ítem del menú posea su vista correspondiente.
- */
 class SeccionOperacionesController extends Controller
 {
     /**
-     * Sección (SUD): Gestión de Sección - Unidad Curricular - Docente.
+     * Carga secciones paginadas aplicando búsqueda por nombre o código y filtro opcional de estado.
+     */
+    private function buscarSeccionesPaginadas(Request $request, ?int $statusId = null, int $perPage = 15)
+    {
+        $search = $request->input('search');
+
+        return Seccion::query()
+            ->with(['cohorteSede.cohorte', 'mallaCurricular', 'tipoSeccion', 'turno'])
+            ->when($statusId !== null, fn ($q) => $q->where('status_id', $statusId))
+            ->when($search, function ($q, string $search) {
+                $q->where(function ($sub) use ($search) {
+                    $sub->where('nombre_sec', 'ilike', "%{$search}%")
+                        ->orWhere('codigo_sec', 'ilike', "%{$search}%");
+                });
+            })
+            ->orderBy('status_id')
+            ->orderBy('nombre_sec')
+            ->paginate($perPage)
+            ->withQueryString();
+    }
+
+    /**
+     * Gestión de Carga Académica por Sección (Unidad Curricular + Docente por Perfil).
      */
     public function sudIndex(Request $request): Response
     {
         $search = $request->input('search');
         $seccionId = $request->input('seccion_id');
 
-        $seccionesQuery = Seccion::query()
+        $secciones = Seccion::query()
             ->with(['cohorteSede.cohorte', 'mallaCurricular'])
-            ->where('status', true);
+            ->where('status_id', 1)
+            ->when($search, function ($q, string $search) {
+                $q->where(function ($sub) use ($search) {
+                    $sub->where('nombre_sec', 'ilike', "%{$search}%")
+                        ->orWhere('codigo_sec', 'ilike', "%{$search}%");
+                });
+            })
+            ->orderBy('nombre_sec')
+            ->get();
 
-        if ($search) {
-            $seccionesQuery->where(function ($q) use ($search) {
-                $q->where('nombre_sec', 'ilike', "%{$search}%")
-                  ->orWhere('codigo_sec', 'ilike', "%{$search}%");
-            });
-        }
+        $objetivoId = $seccionId ?: ($secciones->first()?->id_sec);
+        $seccionSeleccionada = $objetivoId
+            ? Seccion::with(['mallaCurricular.detalles.unidadCurricular'])->find($objetivoId)
+            : null;
 
-        $secciones = $seccionesQuery->orderBy('nombre_sec')->get();
-
-        $seccionSeleccionada = null;
         $asignaciones = [];
         $unidadesDisponibles = [];
+        if ($seccionSeleccionada) {
+            $asignaciones = CargaAcademica::with([
+                'unidadCurricular',
+                'docentePerfil.persona',
+                'horarios' => fn ($q) => $q->where('status_id', 1),
+                'horarios.aula',
+            ])
+                ->where('sec_id', $seccionSeleccionada->id_sec)
+                ->where('status_id', 1)
+                ->get();
 
-        if ($seccionId) {
-            $seccionSeleccionada = Seccion::with(['mallaCurricular.detalles.unidadCurricular'])->find($seccionId);
-            if ($seccionSeleccionada) {
-                $asignaciones = SeccionUnidadDocente::with(['mallaCurricularDetalle.unidadCurricular', 'docente', 'horarios.aula'])
-                    ->where('sec_id', $seccionSeleccionada->id_sec)
-                    ->get();
-
-                if ($seccionSeleccionada->mallaCurricular) {
-                    $unidadesDisponibles = $seccionSeleccionada->mallaCurricular->detalles ?? [];
-                }
-            }
-        } elseif ($secciones->isNotEmpty()) {
-            $seccionSeleccionada = Seccion::with(['mallaCurricular.detalles.unidadCurricular'])->find($secciones->first()->id_sec);
-            if ($seccionSeleccionada) {
-                $asignaciones = SeccionUnidadDocente::with(['mallaCurricularDetalle.unidadCurricular', 'docente', 'horarios.aula'])
-                    ->where('sec_id', $seccionSeleccionada->id_sec)
-                    ->get();
-
-                if ($seccionSeleccionada->mallaCurricular) {
-                    $unidadesDisponibles = $seccionSeleccionada->mallaCurricular->detalles ?? [];
-                }
+            if ($seccionSeleccionada->mallaCurricular) {
+                $unidadesDisponibles = $seccionSeleccionada->mallaCurricular->detalles ?? [];
             }
         }
 
-        $aulas = \App\Models\ProgramacionAcademica\Maestros\Aula::query()
-            ->where('status', true)
-            ->whereNull('deleted_at')
+        $aulas = Aula::query()
+            ->where('status_id', 1)
             ->select('id_aul', 'codigo_aula_aul', 'capacidad_maxima_aul', 'tipo_espacio_aul')
             ->orderBy('codigo_aula_aul')
             ->get();
@@ -82,18 +97,17 @@ class SeccionOperacionesController extends Controller
             'asignaciones'        => $asignaciones,
             'unidadesDisponibles' => $unidadesDisponibles,
             'aulas'               => $aulas,
+            'docentes'            => PersonaPerfil::obtenerDocentesActivosParaSelect(),
             'filters'             => $request->only(['search', 'seccion_id']),
         ]);
     }
 
     /**
-     * Tipo De Sección: Catálogo oficial desde la tabla PostgreSQL `tipo_seccion`.
+     * Tipo De Sección: Catálogo oficial desde `tipo_seccion`.
      */
     public function tipoSeccionIndex(): Response
     {
-        $registros = \App\Models\ProgramacionAcademica\Maestros\TipoSeccion::where('status_id', 1)
-            ->orderBy('id_tis')
-            ->get();
+        $registros = TipoSeccion::where('status_id', 1)->orderBy('id_tis')->get();
 
         $tipos = $registros->map(function ($item) {
             return [
@@ -117,68 +131,50 @@ class SeccionOperacionesController extends Controller
      */
     public function abrirIndex(Request $request): Response
     {
-        $search = $request->input('search');
-
-        $secciones = Seccion::query()
-            ->with(['cohorteSede.cohorte', 'mallaCurricular'])
-            ->when($search, function ($q, $search) {
-                $q->where('nombre_sec', 'ilike', "%{$search}%")
-                  ->orWhere('codigo_sec', 'ilike', "%{$search}%");
-            })
-            ->orderBy('status')
-            ->orderBy('nombre_sec')
-            ->paginate(15)
-            ->withQueryString();
-
         return Inertia::render('ProgramacionAcademica/Seccion/AbrirSeccion', [
-            'secciones' => $secciones,
+            'secciones' => $this->buscarSeccionesPaginadas($request),
             'filters'   => $request->only(['search']),
         ]);
     }
 
     /**
-     * Cerrar Sección: Gestión de consolidación y cierre administrativo de secciones.
+     * Cerrar Sección: Gestión de consolidación y cierre administrativo de secciones activas.
      */
     public function cerrarIndex(Request $request): Response
     {
-        $search = $request->input('search');
-
-        $secciones = Seccion::query()
-            ->with(['cohorteSede.cohorte', 'mallaCurricular'])
-            ->where('status', true)
-            ->when($search, function ($q, $search) {
-                $q->where('nombre_sec', 'ilike', "%{$search}%")
-                  ->orWhere('codigo_sec', 'ilike', "%{$search}%");
-            })
-            ->orderBy('nombre_sec')
-            ->paginate(15)
-            ->withQueryString();
-
         return Inertia::render('ProgramacionAcademica/Seccion/CerrarSeccion', [
-            'secciones' => $secciones,
+            'secciones' => $this->buscarSeccionesPaginadas($request, 1),
             'filters'   => $request->only(['search']),
         ]);
     }
 
     /**
-     * Acción para Abrir o Cerrar Sección (cambio de status).
+     * Alterna apertura/cierre de la sección actualizando `status_id` (`1` Activa / `2` Inactiva).
      */
     public function cambiarEstadoSeccion(Request $request, int $id): RedirectResponse
     {
         $seccion = Seccion::findOrFail($id);
-        $nuevoEstado = (bool) $request->input('status', !$seccion->status);
+
+        if ($request->filled('status_id')) {
+            $nuevoStatusId = (int) $request->input('status_id') === 1 ? 1 : 2;
+        } elseif ($request->has('status')) {
+            $nuevoStatusId = filter_var($request->input('status'), FILTER_VALIDATE_BOOLEAN) ? 1 : 2;
+        } else {
+            $nuevoStatusId = $seccion->status_id === 1 ? 2 : 1;
+        }
 
         $seccion->update([
-            'status'    => $nuevoEstado,
-            'status_id' => $nuevoEstado ? 1 : 2,
+            'status_id'  => $nuevoStatusId,
+            'updated_id' => auth()->id(),
         ]);
 
-        $accion = $nuevoEstado ? 'abierta y activada' : 'cerrada';
+        $accion = $nuevoStatusId === 1 ? 'abierta y activada' : 'cerrada';
+
         return redirect()->back()->with('success', "La sección '{$seccion->nombre_sec}' ha sido {$accion} exitosamente.");
     }
 
     /**
-     * Fusionar Secciones (pronto): Vista informativa y preparatoria.
+     * Fusionar Secciones: Vista informativa y preparatoria.
      */
     public function fusionarIndex(): Response
     {
@@ -186,24 +182,12 @@ class SeccionOperacionesController extends Controller
     }
 
     /**
-     * Cambiar Capacidad Por Sección: Ajuste masivo o puntual de cupos.
+     * Cambiar Capacidad Por Sección: Ajuste puntual de cupos.
      */
     public function capacidadIndex(Request $request): Response
     {
-        $search = $request->input('search');
-
-        $secciones = Seccion::query()
-            ->with(['cohorteSede.cohorte', 'mallaCurricular'])
-            ->when($search, function ($q, $search) {
-                $q->where('nombre_sec', 'ilike', "%{$search}%")
-                  ->orWhere('codigo_sec', 'ilike', "%{$search}%");
-            })
-            ->orderBy('nombre_sec')
-            ->paginate(20)
-            ->withQueryString();
-
         return Inertia::render('ProgramacionAcademica/Seccion/CapacidadSeccion', [
-            'secciones' => $secciones,
+            'secciones' => $this->buscarSeccionesPaginadas($request, null, 20),
             'filters'   => $request->only(['search']),
         ]);
     }
@@ -220,9 +204,9 @@ class SeccionOperacionesController extends Controller
         $seccion = Seccion::findOrFail($id);
         $seccion->update([
             'cupo_maximo_sec' => $validated['cupo_maximo_sec'],
+            'updated_id'      => auth()->id(),
         ]);
 
         return redirect()->back()->with('success', "Capacidad de la sección '{$seccion->nombre_sec}' actualizada a {$validated['cupo_maximo_sec']} estudiantes.");
     }
 }
-

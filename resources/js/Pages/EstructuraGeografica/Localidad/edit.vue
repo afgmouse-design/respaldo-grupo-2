@@ -5,27 +5,25 @@
  * Propósito: Página independiente con formulario precargado para modificar
  * los datos de una localidad existente y reasignar su parroquia padre.
  * Cumple estrictamente la regla de CERO MODALES.
+ *
+ * Historial de Modificaciones:
+ * - [Actualización sogac_mio]: Uso de `status_id` entero (1 Activo / 2 Inactivo) en formulario e interfaz.
+ * - 2026-11-16: Estandarización del pie de formulario con <CrudFormFooter />.
  */
-import { ref, computed } from 'vue';
 import { Head, Link, useForm } from '@inertiajs/vue3';
+import { AlertCircle, ArrowLeft, Building2, Compass, Eye, Home } from 'lucide-vue-next';
+import { computed, ref } from 'vue';
 import { route } from 'ziggy-js';
-import AppLayout from '@/layouts/AppLayout.vue';
+import Badge from '@/components/ui/badge/Badge.vue';
 import { Button } from '@/components/ui/button';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
+import CrudFormFooter from '@/components/ui/CrudFormFooter.vue';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import Badge from '@/components/ui/badge/Badge.vue';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
-import type { BreadcrumbItem } from '@/types/navigation';
+import AppLayout from '@/layouts/AppLayout.vue';
+import { esActivo, resolverStatusId } from '@/lib/status';
 import { formatNombre } from '@/lib/utils';
-import {
-    Home,
-    ArrowLeft,
-    Save,
-    AlertCircle,
-    Eye,
-    Compass,
-    Building2,
-} from 'lucide-vue-next';
+import type { BreadcrumbItem } from '@/types/navigation';
 
 interface MunicipioRef {
     id_mun: number;
@@ -42,7 +40,8 @@ interface LocalidadModel {
     id_loc: number;
     nombre_loc: string;
     par_id: number;
-    status: boolean;
+    status_id?: number;
+    status?: boolean | number;
     created_at?: string;
     updated_at?: string;
     parroquia?: ParroquiaRef;
@@ -65,8 +64,8 @@ const municipioFiltroId = ref<number | string>(props.localidad.parroquia?.mun_id
 
 const form = useForm({
     nombre_loc: props.localidad.nombre_loc,
-    par_id: props.localidad.par_id,
-    status: props.localidad.status,
+    par_id: props.localidad.par_id as number | string,
+    status_id: resolverStatusId(props.localidad),
 });
 
 const parroquiasDisponibles = computed(() => {
@@ -118,8 +117,8 @@ const submit = () => {
                         <h1 class="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
                             Editar Localidad: {{ props.localidad.nombre_loc }}
                         </h1>
-                        <Badge :variant="props.localidad.status ? 'successCustom' : 'destructiveCustom'" class="ml-2">
-                            {{ props.localidad.status ? 'Activo' : 'Inactivo' }}
+                        <Badge :variant="esActivo(props.localidad) ? 'successCustom' : 'destructiveCustom'" class="ml-2">
+                            {{ esActivo(props.localidad) ? 'Activo' : 'Inactivo' }}
                         </Badge>
                     </div>
                     <p class="text-sm text-muted-foreground ml-10">
@@ -247,29 +246,25 @@ const submit = () => {
                                     <input
                                         id="status"
                                         type="checkbox"
-                                        v-model="form.status"
+                                        :checked="form.status_id === 1"
+                                        @change="form.status_id = ($event.target as HTMLInputElement).checked ? 1 : 2"
                                         class="sr-only peer"
                                     />
                                     <div class="w-11 h-6 bg-slate-200 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600 dark:bg-slate-700"></div>
                                     <span class="ml-3 text-sm font-medium text-slate-700 dark:text-slate-300">
-                                        {{ form.status ? 'Registro Activo' : 'Registro Inactivo' }}
+                                        {{ form.status_id === 1 ? 'Registro Activo' : 'Registro Inactivo' }}
                                     </span>
                                 </label>
                             </div>
                         </div>
                     </CardContent>
 
-                    <CardFooter class="flex items-center justify-end gap-3 border-t bg-muted/20 px-6 py-4">
-                        <Button as-child variant="outline">
-                            <Link :href="route('geografia.localidad.index')">
-                                Cancelar
-                            </Link>
-                        </Button>
-
-                        <Button type="submit" :disabled="form.processing" class="shadow-xs">
-                            <Save class="h-4 w-4 mr-2" />
-                            {{ form.processing ? 'Guardando...' : 'Actualizar' }}
-                        </Button>
+                    <CardFooter class="border-t border-slate-100 bg-muted/20 px-6 py-4 dark:border-slate-800/60">
+                        <CrudFormFooter
+                            :cancel-href="route('geografia.localidad.index')"
+                            :is-edit="true"
+                            :processing="form.processing"
+                        />
                     </CardFooter>
                 </form>
             </Card>

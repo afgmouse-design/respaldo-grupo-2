@@ -1,5 +1,10 @@
 <?php
 
+/**
+ * Propósito: Controlador CRUD del Maestro Tipo de Aula (`tipo_aula`).
+ * Historial: Actualizado para persistir `status_id` sin el campo booleano `status`.
+ */
+
 namespace App\Http\Controllers\ProgramacionAcademica\Maestros;
 
 use App\Http\Controllers\Controller;
@@ -11,13 +16,6 @@ use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
-/**
- * Controlador: Maestro de Tipo de Aula (Programación Académica).
- *
- * Propósito: CRUD SPA con Inertia. Crear/editar/ver se resuelven en modales desde index.vue,
- * por lo que no hay métodos create/edit/show. La baja es lógica (status_id/status) vía alternarEstatus().
- * Toda acción se autoriza con TipoAulaPolicy.
- */
 class TipoAulaController extends Controller
 {
     public function index(Request $request): Response
@@ -27,8 +25,8 @@ class TipoAulaController extends Controller
         $perPage = (int) ($request->input('registros_per_page') ?? $request->input('per_page') ?? 10);
 
         return Inertia::render('ProgramacionAcademica/Maestros/TipoAula/index', [
-            'tiposAula' => TipoAula::obtenerPaginados($request->only(['search', 'status']), $perPage),
-            'filters'   => $request->only(['search', 'status']),
+            'tiposAula' => TipoAula::obtenerPaginados($request->only(['search', 'status', 'status_id']), $perPage),
+            'filters'   => $request->only(['search', 'status', 'status_id']),
         ]);
     }
 
@@ -45,9 +43,9 @@ class TipoAulaController extends Controller
 
         try {
             TipoAula::create($request->validated() + [
-                'status'     => true,
                 'status_id'  => 1,
                 'created_id' => auth()->id(),
+                'updated_id' => auth()->id(),
             ]);
 
             return redirect()->route('tipo_aula.index')->with('success', 'Tipo de aula creado correctamente.');
@@ -91,23 +89,35 @@ class TipoAulaController extends Controller
     }
 
     /**
-     * No elimina: alterna el estatus (activo ↔ inactivo) con alternarEstatus().
+     * Si recibe `eliminar=1`, ejecuta baja lógica en interfaz (`deleted_at` + `status_id = 2`);
+     * de lo contrario invierte únicamente el estatus lógico (`status_id` 1 <-> 2).
+     *
+     * Historial:
+     * - 2026-11-16: Separada la eliminación lógica (`eliminar=1`) del toggle de estado.
      */
-    public function destroy(int $tipo_aula): RedirectResponse
+    public function destroy(Request $request, int $tipo_aula): RedirectResponse
     {
         $tipoAula = TipoAula::where('id_tia', $tipo_aula)->firstOrFail();
         $this->authorize('delete', $tipoAula);
 
         try {
+            if ($request->boolean('eliminar')) {
+                TipoAula::ejecutarBajaLogicaModelo($tipoAula, auth()->id(), TipoAula::STATUS_INACTIVO);
+
+                return redirect()->back()->with('success', "El tipo de aula '{$tipoAula->nombre_tia}' ha sido eliminado correctamente.");
+            }
+
             $nuevoEstado = $tipoAula->status_id === 1 ? 2 : 1;
             TipoAula::alternarEstatus($tipo_aula, $nuevoEstado);
 
-            return redirect()->back()->with('success', $nuevoEstado === 1
-                ? 'Tipo de aula activado correctamente.'
-                : 'Tipo de aula desactivado correctamente.');
+            return redirect()->back()->with(
+                'success',
+                $nuevoEstado === 1
+                    ? 'Tipo de aula activado correctamente.'
+                    : 'Tipo de aula desactivado correctamente.'
+            );
         } catch (\Throwable $e) {
-            return redirect()->back()->withErrors(['error' => 'No se pudo cambiar el estatus del tipo de aula.']);
+            return redirect()->back()->withErrors(['error' => 'No se pudo procesar la acción sobre el tipo de aula.']);
         }
     }
 }
-

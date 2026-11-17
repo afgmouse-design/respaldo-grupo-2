@@ -15,36 +15,31 @@
  * Se unificaron la denominación, siglas y código ministerial en una misma celda vertical,
  * se integró la ubicación geográfica en dos líneas y se removió la columna redundante de
  * universidad matriz para que la tabla ajuste al 100% del contenedor sin barra de desplazamiento horizontal.
+ * Actualización (Alineación sogac_mio):
+ * Se sustituyen referencias legacy (`cdn_id`, `condicion.nombre_cdn`, `status`) por `cse_id`,
+ * `condicion_sede.nombre_cse` y `status_id` mediante `@/lib/status`.
+ * - 2026-11-16: Estandarización global con <CrudActionButtons /> y botón superior "Nueva Sede".
  */
-import { ref, watch, computed } from 'vue';
 import { Head, Link, router } from '@inertiajs/vue3';
+import { Building, MapPin, Plus, Tag, X } from 'lucide-vue-next';
+import { computed, ref, watch } from 'vue';
 import { route } from 'ziggy-js';
-import AppLayout from '@/layouts/AppLayout.vue';
 import { Button } from '@/components/ui/button';
-import Badge from '@/components/ui/badge/Badge.vue';
-import StatusSwitch from '@/components/ui/StatusSwitch.vue';
-import SuccessAlert from '@/components/ui/SuccessAlert.vue';
-import DataTable from '@/components/ui/DataTable.vue';
+import CrudActionButtons from '@/components/ui/CrudActionButtons.vue';
 import DataPagination from '@/components/ui/DataPagination.vue';
-import TableSkeleton from '@/components/ui/TableSkeleton.vue';
+import DataTable from '@/components/ui/DataTable.vue';
 import SearchFilter from '@/components/ui/filters/SearchFilter.vue';
 import TabFilter from '@/components/ui/filters/TabFilter.vue';
+import StatusSwitch from '@/components/ui/StatusSwitch.vue';
+import SuccessAlert from '@/components/ui/SuccessAlert.vue';
+import TableSkeleton from '@/components/ui/TableSkeleton.vue';
+import { useConfirmDialog } from '@/composables/useConfirmDialog';
 import { useDataFetching } from '@/composables/useDataFetching';
 import { useFlashAlert } from '@/composables/useFlashAlert';
-import { useConfirmDialog } from '@/composables/useConfirmDialog';
+import AppLayout from '@/layouts/AppLayout.vue';
+import { esActivo, resolverStatusId } from '@/lib/status';
 import type { Column } from '@/types/dataTable';
 import type { BreadcrumbItem } from '@/types/navigation';
-import {
-    Building,
-    Plus,
-    Eye,
-    Pencil,
-    Trash2,
-    X,
-    MapPin,
-    GraduationCap,
-    Tag,
-} from 'lucide-vue-next';
 
 interface UniversidadRelacion {
     id_uni: number;
@@ -70,8 +65,8 @@ interface LocalidadRelacion {
 }
 
 interface CondicionRelacion {
-    id_cdn: number;
-    nombre_cdn: string;
+    id_cse: number;
+    nombre_cse: string;
 }
 
 interface SedeItem {
@@ -81,11 +76,13 @@ interface SedeItem {
     codigo_ministerio_sed?: string | null;
     uni_id: number;
     loc_id: number;
-    cdn_id?: number | null;
-    status: boolean;
+    cse_id?: number | null;
+    status_id?: number;
+    status?: boolean | number;
     est_sed?: boolean;
     universidad?: UniversidadRelacion | null;
     localidad?: LocalidadRelacion | null;
+    condicion_sede?: CondicionRelacion | null;
     condicion?: CondicionRelacion | null;
     created_at?: string;
     updated_at?: string;
@@ -127,7 +124,7 @@ const columns: Column[] = [
     { key: 'localidad', label: 'Ubicación Geográfica', align: 'left' },
     { key: 'condicion', label: 'Condición', align: 'center', width: 'w-36' },
     { key: 'status', label: 'Estatus', align: 'center', width: 'w-28' },
-    { key: 'actions', label: 'Acciones', align: 'center', width: 'w-32' },
+    { key: 'actions', label: 'Acciones', align: 'center', width: 'w-36' },
 ];
 
 const {
@@ -164,10 +161,7 @@ watch(
     { deep: true, immediate: true }
 );
 
-const isActivo = (row: any) => {
-    const val = row?.status ?? row?.est_sed;
-    return val === true || val === 1 || val === '1' || val === 'true';
-};
+const isActivo = (row: unknown) => esActivo(row);
 
 const alternarEstatus = async (row: SedeItem) => {
     const activo = isActivo(row);
@@ -177,12 +171,6 @@ const alternarEstatus = async (row: SedeItem) => {
             ? route('organizacion.sede.status', row.id_sed)
             : route('sede.status', row.id_sed);
         router.patch(rutaStatus, {}, { preserveScroll: true });
-    }
-};
-
-const eliminarRegistro = async (ruta: string) => {
-    if (await confirmDialog('¿Estás seguro de que deseas eliminar este registro? Desaparecerá de la lista.')) {
-        router.delete(ruta);
     }
 };
 </script>
@@ -216,10 +204,10 @@ const eliminarRegistro = async (ruta: string) => {
                 </div>
 
                 <div class="flex items-center gap-2">
-                    <Button as-child size="default" class="shadow-sm">
+                    <Button as-child size="default" class="gap-2 shadow-sm">
                         <Link :href="route('organizacion.sede.create')">
-                            <Plus class="h-4 w-4 mr-2" />
-                            Registrar Sede
+                            <Plus class="h-4 w-4" />
+                            Nueva Sede
                         </Link>
                     </Button>
                 </div>
@@ -307,9 +295,9 @@ const eliminarRegistro = async (ruta: string) => {
 
                     <!-- SLOT: CONDICION -->
                     <template #condicion="{ row }">
-                        <span v-if="row.condicion" class="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium">
+                        <span v-if="row.condicion_sede ?? row.condicion" class="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium">
                             <Tag class="h-3 w-3 text-muted-foreground" />
-                            {{ row.condicion.nombre_cdn }}
+                            {{ (row.condicion_sede ?? row.condicion).nombre_cse }}
                         </span>
                         <span v-else class="text-xs text-muted-foreground italic">
                             No especificada
@@ -319,41 +307,22 @@ const eliminarRegistro = async (ruta: string) => {
                     <!-- SLOT: ESTATUS -->
                     <template #status="{ row, item }">
                         <StatusSwitch
-                            :key="`sede-${(row || item)?.id_sed}-${((row || item)?.est_sed ?? (row || item)?.status)}`"
-                            :status="(row || item)?.est_sed ?? (row || item)?.status"
+                            :key="`sede-${(row || item)?.id_sed}-${resolverStatusId(row || item)}`"
+                            :status="esActivo(row || item)"
                             @toggle="alternarEstatus(row || item)"
                         />
                     </template>
 
-                    <!-- SLOT: ACCIONES DIRECTAS STANDALONE (0 MODALES) -->
+                    <!-- SLOT: ACCIONES ESTÁNDAR -->
                     <template #actions="{ row }">
-                        <div class="flex items-center justify-center gap-1.5">
-                            <!-- Ver Ficha Detallada -->
-                            <Button as-child variant="ghost" size="icon" class="h-8 w-8 text-slate-600 hover:text-primary dark:text-slate-400" title="Ver ficha completa">
-                                <Link :href="route('organizacion.sede.show', row.id_sed)">
-                                    <Eye class="h-4 w-4" />
-                                </Link>
-                            </Button>
-
-                            <!-- Editar Sede -->
-                            <Button as-child variant="ghost" size="icon" class="h-8 w-8 text-amber-600 hover:text-amber-700 dark:text-amber-400" title="Editar datos">
-                                <Link :href="route('organizacion.sede.edit', row.id_sed)">
-                                    <Pencil class="h-4 w-4" />
-                                </Link>
-                            </Button>
-
-                            <!-- Eliminar Sede (Baja Lógica) -->
-                            <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                class="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
-                                title="Eliminar sede"
-                                @click="eliminarRegistro(route().has('organizacion.sede.destroy') ? route('organizacion.sede.destroy', row.id_sed) : route('sede.destroy', row.id_sed))"
-                            >
-                                <Trash2 class="h-4 w-4" />
-                            </Button>
-                        </div>
+                        <CrudActionButtons
+                            show-route="organizacion.sede.show"
+                            edit-route="organizacion.sede.edit"
+                            :delete-href="route().has('organizacion.sede.destroy') ? route('organizacion.sede.destroy', row.id_sed) : route('sede.destroy', row.id_sed)"
+                            :record-id="row.id_sed"
+                            :record-name="row.nombre_sed"
+                            confirm-message="¿Está seguro de que desea eliminar esta sede? Desaparecerá de la lista conservando su historial en base de datos."
+                        />
                     </template>
                 </DataTable>
             </div>

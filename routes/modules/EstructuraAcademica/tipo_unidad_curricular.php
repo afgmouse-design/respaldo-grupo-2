@@ -7,6 +7,11 @@ use Illuminate\Support\Facades\Route;
  * Rutas para el módulo Maestro de Tipo de Unidad Curricular.
  */
 Route::middleware(['web', 'auth'])->group(function () {
+    Route::patch('academico/tipo-unidad-curricular/{tipo_unidad_curricular}/toggle-status', [TipoUnidadCurricularController::class, 'toggleStatus'])
+        ->name('academico.tipo-unidad-curricular.toggle_status');
+    Route::patch('tipo-unidad-curricular/{tipo_unidad_curricular}/toggle-status', [TipoUnidadCurricularController::class, 'toggleStatus'])
+        ->name('tipo-unidad-curricular.toggle_status');
+
     Route::resource('academico/tipo-unidad-curricular', TipoUnidadCurricularController::class)
         ->names('academico.tipo-unidad-curricular');
 

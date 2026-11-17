@@ -1,27 +1,35 @@
 <script setup lang="ts">
 /**
  * Vista Standalone: Edición de Trayecto (Módulo: Estructura Académica / Régimen).
+ *
+ * Propósito: Modifica un trayecto existente y su vínculo con `tipo_lapso` (`tla_id`).
+ *
+ * Historial:
+ *  - 2026-11-14: Alineado a `sogac_mio.sql` (`tla_id`, `tiposLapso`/`id_tla`, `status_id` con `@/lib/status`).
+ *  - 2026-11-16: Estandarización del pie de formulario con <CrudFormFooter />.
  */
 import { Head, Link, useForm } from '@inertiajs/vue3';
+import {
+    AlertCircle,
+    ArrowLeft,
+    GraduationCap,
+} from 'lucide-vue-next';
+import { computed } from 'vue';
 import { route } from 'ziggy-js';
-import AppLayout from '@/layouts/AppLayout.vue';
 import { Button } from '@/components/ui/button';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
+import CrudFormFooter from '@/components/ui/CrudFormFooter.vue';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
+import AppLayout from '@/layouts/AppLayout.vue';
+import { resolverStatusId } from '@/lib/status';
 import type { BreadcrumbItem } from '@/types/navigation';
-import {
-    GraduationCap,
-    ArrowLeft,
-    Save,
-    AlertCircle,
-} from 'lucide-vue-next';
 
-interface TipoPeriodoItem {
-    id_tpd: number;
-    nombre_tpd: string;
-    codigo_tpd?: string;
-    nomenclatura?: string;
+interface TipoLapsoItem {
+    id_tla: number;
+    nombre_tla: string;
+    codigo_tla?: string;
+    nomenclatura_tla?: string;
 }
 
 interface TrayectoItem {
@@ -29,14 +37,17 @@ interface TrayectoItem {
     codigo_tra?: string;
     nombre_tra: string;
     numero_orden_tra: number;
-    tpd_id: number;
-    status: boolean;
+    tla_id: number;
+    status_id?: number;
 }
 
 const props = defineProps<{
     trayecto: TrayectoItem;
-    tiposPeriodo: TipoPeriodoItem[];
+    tiposLapso?: TipoLapsoItem[];
+    tiposPeriodo?: TipoLapsoItem[];
 }>();
+
+const tiposCatalogo = computed(() => props.tiposLapso ?? props.tiposPeriodo ?? []);
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Dashboard', subtitle: 'Panel Principal', href: route('dashboard') },
@@ -49,8 +60,8 @@ const form = useForm({
     nombre_tra: props.trayecto.nombre_tra,
     codigo_tra: props.trayecto.codigo_tra || '',
     numero_orden_tra: props.trayecto.numero_orden_tra,
-    tpd_id: props.trayecto.tpd_id,
-    status: props.trayecto.status,
+    tla_id: props.trayecto.tla_id,
+    status_id: resolverStatusId(props.trayecto),
 });
 
 const submit = () => {
@@ -104,29 +115,29 @@ const submit = () => {
                             <span>{{ form.errors.error }}</span>
                         </div>
 
-                        <!-- MODALIDAD ACADÉMICA (TIPO DE PERÍODO) -->
+                        <!-- MODALIDAD ACADÉMICA (TIPO DE LAPSO) -->
                         <div class="space-y-2">
-                            <Label for="tpd_id" class="text-sm font-medium">
-                                Modalidad Académica (Tipo de Período) <span class="text-destructive">*</span>
+                            <Label for="tla_id" class="text-sm font-medium">
+                                Modalidad Académica (Tipo de Lapso) <span class="text-destructive">*</span>
                             </Label>
                             <select
-                                id="tpd_id"
-                                v-model="form.tpd_id"
+                                id="tla_id"
+                                v-model="form.tla_id"
                                 class="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                                :class="{ 'border-destructive': form.errors.tpd_id }"
+                                :class="{ 'border-destructive': form.errors.tla_id }"
                                 required
                             >
-                                <option value="" disabled>Seleccionar modalidad o tipo de período...</option>
+                                <option value="" disabled>Seleccionar modalidad o tipo de lapso...</option>
                                 <option
-                                    v-for="tpd in tiposPeriodo"
-                                    :key="tpd.id_tpd"
-                                    :value="tpd.id_tpd"
+                                    v-for="tl in tiposCatalogo"
+                                    :key="tl.id_tla"
+                                    :value="tl.id_tla"
                                 >
-                                    {{ tpd.nombre_tpd }} {{ tpd.nomenclatura ? `(${tpd.nomenclatura})` : '' }}
+                                    {{ tl.nombre_tla }} {{ tl.nomenclatura_tla ? `(${tl.nomenclatura_tla})` : '' }}
                                 </option>
                             </select>
-                            <p v-if="form.errors.tpd_id" class="text-xs text-destructive">
-                                {{ form.errors.tpd_id }}
+                            <p v-if="form.errors.tla_id" class="text-xs text-destructive">
+                                {{ form.errors.tla_id }}
                             </p>
                         </div>
 
@@ -220,16 +231,12 @@ const submit = () => {
                         </div>
                     </CardContent>
 
-                    <CardFooter class="flex items-center justify-end gap-3 border-t bg-muted/10 px-6 py-4">
-                        <Button as-child variant="outline">
-                            <Link :href="route('academico.trayecto.index')">
-                                Cancelar
-                            </Link>
-                        </Button>
-                        <Button type="submit" :disabled="form.processing" class="gap-2">
-                            <Save class="h-4 w-4" />
-                            <span>{{ form.processing ? 'Actualizando...' : 'Actualizar' }}</span>
-                        </Button>
+                    <CardFooter class="border-t border-slate-100 bg-muted/20 px-6 py-4 dark:border-slate-800/60">
+                        <CrudFormFooter
+                            :cancel-href="route('academico.trayecto.index')"
+                            :is-edit="true"
+                            :processing="form.processing"
+                        />
                     </CardFooter>
                 </form>
             </Card>

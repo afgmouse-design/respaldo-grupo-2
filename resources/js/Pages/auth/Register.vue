@@ -26,19 +26,19 @@ import { store } from '@/routes/register';
         >
             <div class="grid gap-6">
                 <div class="grid gap-2">
-                    <Label for="name">Nombre</Label>
-                    <span class="sr-only">Nombre completo</span>
+                    <Label for="username">Nombre de usuario</Label>
+                    <span class="sr-only">Nombre de usuario</span>
                     <Input
-                        id="name"
+                        id="username"
                         type="text"
                         required
                         autofocus
                         :tabindex="1"
-                        autocomplete="name"
-                        name="name"
-                        placeholder="Nombre completo"
+                        autocomplete="username"
+                        name="username"
+                        placeholder="Nombre de usuario"
                     />
-                    <InputError :message="errors.name" />
+                    <InputError :message="errors.username" />
                 </div>
 
                 <div class="grid gap-2">

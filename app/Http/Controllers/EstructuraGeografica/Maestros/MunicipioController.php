@@ -160,12 +160,16 @@ class MunicipioController extends Controller
     }
 
     /**
-     * Realiza la baja lógica del municipio y propaga la desactivación en cascada a sus dependencias subordinadas.
+     * Ejecuta la eliminación lógica en interfaz (`deleted_at` + `status_id = 2`)
+     * propagando la baja en cascada sin borrar registros físicos de BD.
+     *
+     * Historial:
+     * - 2026-11-16: Reemplazada la mera inactivación (`desactivarConCascada`) por `eliminarConCascada`.
      */
     public function destroy(int $id_mun): RedirectResponse
     {
         try {
-            $resultado = Municipio::desactivarConCascada($id_mun, auth()->id());
+            $resultado = Municipio::eliminarConCascada($id_mun, auth()->id());
 
             return redirect()
                 ->back()

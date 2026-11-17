@@ -7,6 +7,7 @@
  *
  * Historial de Modificaciones:
  * - [Actualización]: Integración del componente `<StatusSwitch>` en el encabezado del municipio y en la tabla de parroquias subordinadas.
+ * - [Actualización sogac_mio]: Sustitución de lecturas booleanas `status` por `status_id` mediante `@/lib/status`.
  */
 import { Head, Link, router } from '@inertiajs/vue3';
 import { route } from 'ziggy-js';
@@ -15,6 +16,7 @@ import { Button } from '@/components/ui/button';
 import StatusSwitch from '@/components/ui/StatusSwitch.vue';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { useConfirmDialog } from '@/composables/useConfirmDialog';
+import { esActivo } from '@/lib/status';
 import type { BreadcrumbItem } from '@/types/navigation';
 import {
     Building2,
@@ -34,7 +36,8 @@ import {
 interface ParroquiaSubordinada {
     id_par: number;
     nombre_par: string;
-    status: boolean;
+    status_id?: number;
+    status?: boolean | number;
     localidades_count?: number;
     created_at?: string;
 }
@@ -55,7 +58,8 @@ interface MunicipioModel {
     id_mun: number;
     nombre_mun: string;
     esd_id: number;
-    status: boolean;
+    status_id?: number;
+    status?: boolean | number;
     created_at?: string;
     updated_at?: string;
     estado?: EstadoRef;
@@ -87,14 +91,14 @@ const formatDate = (isoString?: string) => {
 };
 
 const toggleEstatus = async () => {
-    const accion = props.municipio.status ? 'desactivar' : 'activar';
+    const accion = esActivo(props.municipio) ? 'desactivar' : 'activar';
     if (await confirmDialog(`¿Está seguro de que desea ${accion} el municipio "${props.municipio.nombre_mun}"?`)) {
-        router.delete(route('geografia.municipio.destroy', props.municipio.id_mun));
+        router.patch(route('geografia.municipio.status', props.municipio.id_mun), {}, { preserveScroll: true });
     }
 };
 
 const toggleEstatusParroquia = async (parr: ParroquiaSubordinada) => {
-    const accion = parr.status ? 'desactivar' : 'activar';
+    const accion = esActivo(parr) ? 'desactivar' : 'activar';
     if (await confirmDialog(`¿Está seguro de que desea ${accion} la parroquia "${parr.nombre_par}"?`)) {
         router.patch(route('geografia.parroquia.status', parr.id_par), {}, { preserveScroll: true });
     }
@@ -117,7 +121,7 @@ const toggleEstatusParroquia = async (parr: ParroquiaSubordinada) => {
                         </Button>
                         <h1 class="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100 flex items-center gap-3">
                             <span>{{ props.municipio.nombre_mun }}</span>
-                            <StatusSwitch :status="props.municipio.status" @toggle="toggleEstatus" />
+                            <StatusSwitch :status="esActivo(props.municipio)" @toggle="toggleEstatus" />
                         </h1>
                     </div>
                     <p class="text-sm text-muted-foreground ml-10 flex items-center gap-2 flex-wrap">
@@ -152,11 +156,11 @@ const toggleEstatusParroquia = async (parr: ParroquiaSubordinada) => {
                     <Button
                         variant="outline"
                         size="sm"
-                        :class="props.municipio.status ? 'text-red-600 hover:text-red-700' : 'text-emerald-600 hover:text-emerald-700'"
+                        :class="esActivo(props.municipio) ? 'text-red-600 hover:text-red-700' : 'text-emerald-600 hover:text-emerald-700'"
                         @click="toggleEstatus"
                     >
                         <Power class="h-4 w-4 mr-2" />
-                        {{ props.municipio.status ? 'Desactivar' : 'Activar' }}
+                        {{ esActivo(props.municipio) ? 'Desactivar' : 'Activar' }}
                     </Button>
                 </div>
             </div>
@@ -277,7 +281,7 @@ const toggleEstatusParroquia = async (parr: ParroquiaSubordinada) => {
                                     </td>
                                     <td class="px-6 py-4 text-center">
                                         <div class="flex items-center justify-center">
-                                            <StatusSwitch :status="parr.status" @toggle="toggleEstatusParroquia(parr)" />
+                                            <StatusSwitch :status="esActivo(parr)" @toggle="toggleEstatusParroquia(parr)" />
                                         </div>
                                     </td>
                                 </tr>

@@ -2,119 +2,85 @@
 
 namespace App\Models\EstructuraAcademica\Maestros;
 
+use App\Models\Concerns\HandlesSoftDeleteWithStatus;
 use App\Models\Concerns\RegistraEnBitacora;
+use App\Models\Concerns\UsesStatusCatalog;
 use App\Models\User;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
  * Modelo: Tipo de Unidad Curricular (tabla `tipo_unidad_curricular`).
  *
- * Módulo: Estructura Académica / Currículo.
- * Propósito: Gestiona las clasificaciones o naturalezas de unidades curriculares (Teórica, Práctica, Proyecto, etc.).
+ * Propósito: Gestiona las clasificaciones o naturalezas de unidades curriculares.
  *
- * Actualización:
- *  - Ajuste estricto de la propiedad $fillable = ['nombre_tuc', 'status_id', 'status']
- *    para prevenir excepciones de asignación masiva (Mass Assignment Error).
- *  - Actualización 2026-10-22 (Orden DESC y soporte para mostrar registros inactivos):
- *    Se eliminó la restricción fija de solo status_id = 1 para permitir listar registros inactivos
- *    y se configuró la ordenación descendente (DESC) por id_tuc.
+ * Historial:
+ *  - 2026-11-14: Alineado a `sogac_mio.sql` (`status_id`, `SoftDeletes`, sin `status` booleano).
+ *  - 2026-11-16: Incorporado `HandlesSoftDeleteWithStatus` para eliminación lógica en interfaz.
  */
 class TipoUnidadCurricular extends Model
 {
+    use SoftDeletes;
     use RegistraEnBitacora;
+    use UsesStatusCatalog;
+    use HandlesSoftDeleteWithStatus;
 
-    /** Nombre explícito de la tabla en singular. */
     protected $table = 'tipo_unidad_curricular';
-
-    /** Llave primaria personalizada. */
     protected $primaryKey = 'id_tuc';
-
-    /** Módulo para auditoría en bitácora. */
     protected $moduloAuditoria = 'TipoUnidadCurricular';
 
-    /** Desactivación de timestamps automáticos de Eloquent. */
-    public $timestamps = false;
-
-    /**
-     * Atributos asignables masivamente.
-     */
     protected $fillable = [
         'nombre_tuc',
         'status_id',
-        'status',
+        'created_id',
+        'updated_id',
     ];
 
-    /** Conversión de tipos de datos nativos. */
     protected $casts = [
         'id_tuc'    => 'integer',
-        'status'    => 'boolean',
         'status_id' => 'integer',
     ];
 
-    /** Atributos virtuales calculados. */
-    protected $appends = ['est_tuc'];
-
-    /**
-     * Accesor para el estatus lógico de compatibilidad con interfaz.
-     */
-    public function getEstTucAttribute(): bool
-    {
-        return (bool) ($this->status_id === 1);
-    }
-
-    /**
-     * Relación Eloquent: Usuario creador del registro.
-     */
     public function creador(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_id');
     }
 
-    /**
-     * Relación Eloquent: Usuario actualizador del registro.
-     */
     public function actualizador(): BelongsTo
     {
         return $this->belongsTo(User::class, 'updated_id');
     }
 
-    /**
-     * Obtiene los registros paginados con orden DESC y soporte para activos e inactivos.
-     *
-     * @param string|array|null $busqueda Término de búsqueda por nombre, o array de filtros
-     * @param int $porPagina Cantidad de registros por página
-     */
-    public static function obtenerPaginados($busqueda = null, int $porPagina = 10): LengthAwarePaginator
+    public function scopeActivos(Builder $query): Builder
+    {
+        return $query->where('status_id', self::STATUS_ACTIVO);
+    }
+
+    public static function obtenerPaginados(array|string|null $busqueda = null, int $porPagina = 10): LengthAwarePaginator
     {
         $search = is_array($busqueda) ? ($busqueda['search'] ?? null) : $busqueda;
-        $status = is_array($busqueda) ? ($busqueda['status'] ?? null) : null;
+        $statusId = static::resolverFiltroStatusId(is_array($busqueda) ? ($busqueda['status'] ?? $busqueda['status_id'] ?? null) : null);
 
         $query = DB::table('tipo_unidad_curricular')
             ->select([
                 'id_tuc',
                 'nombre_tuc',
-                'status',
                 'status_id',
                 'created_id',
                 'updated_id',
                 'created_at',
                 'updated_at',
-            ]);
+            ])
+            ->whereNull('deleted_at')
+            ->when($statusId !== null, fn ($q) => $q->where('status_id', $statusId));
 
-        if ($status !== null && $status !== '' && $status !== 'all') {
-            $statusBool = filter_var($status, FILTER_VALIDATE_BOOLEAN);
-            $query->where(function ($q) use ($statusBool) {
-                $q->where('status', $statusBool)
-                  ->orWhere('status_id', $statusBool ? 1 : 2);
-            });
-        }
-
-        if (!empty($search)) {
+        if (! empty($search)) {
             $query->where('nombre_tuc', 'ilike', "%{$search}%");
         }
 
@@ -124,52 +90,38 @@ class TipoUnidadCurricular extends Model
 
         $paginator->getCollection()->transform(function ($item) {
             $item->id_tuc = (int) $item->id_tuc;
-            $item->status = (bool) ($item->status ?? ($item->status_id === 1));
-            $item->est_tuc = (bool) ($item->status ?? ($item->status_id === 1));
+            $item->status_id = (int) $item->status_id;
+
             return $item;
         });
 
         return $paginator;
     }
 
-    /**
-     * Actualiza el status_id del registro (1 = Activo, 2 = Inactivo) y sincroniza el campo booleano status.
-     *
-     * @param int $id Identificador único del tipo de unidad curricular
-     * @param int $estado Código del nuevo estado (por defecto 2 = inactivo)
-     * @param int|null $userId Usuario que efectúa la operación
-     */
-    public static function alternarEstatus(int $id, int $estado = 2, ?int $userId = null): bool
+    public static function alternarEstatus(int $id, int $estado = self::STATUS_INACTIVO, ?int $userId = null): bool
     {
-        $registro = DB::table('tipo_unidad_curricular')->where('id_tuc', $id)->first();
-
-        if (!$registro) {
+        $registro = DB::table('tipo_unidad_curricular')->where('id_tuc', $id)->whereNull('deleted_at')->first();
+        if (! $registro) {
             throw (new ModelNotFoundException)->setModel(static::class, [$id]);
         }
-
-        $nuevoStatusBool = ($estado === 1);
-        $usuarioId = $userId ?? auth()->id();
 
         DB::table('tipo_unidad_curricular')
             ->where('id_tuc', $id)
             ->update([
                 'status_id'  => $estado,
-                'status'     => $nuevoStatusBool,
-                'updated_id' => $usuarioId,
+                'updated_id' => $userId ?? auth()->id(),
                 'updated_at' => now(),
             ]);
 
         return true;
     }
 
-    /**
-     * Obtiene los tipos de unidad curricular activos para selectores desplegables.
-     */
     public static function obtenerActivosParaSelect(): Collection
     {
         return DB::table('tipo_unidad_curricular')
             ->select(['id_tuc', 'nombre_tuc'])
-            ->where('status_id', 1)
+            ->where('status_id', self::STATUS_ACTIVO)
+            ->whereNull('deleted_at')
             ->orderBy('nombre_tuc', 'asc')
             ->get();
     }

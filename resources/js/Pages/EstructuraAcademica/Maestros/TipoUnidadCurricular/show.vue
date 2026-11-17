@@ -11,6 +11,7 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
+import { esActivo as esRegistroActivo } from '@/lib/status';
 import type { BreadcrumbItem } from '@/types/navigation';
 import {
     BookOpen,
@@ -32,9 +33,7 @@ const props = defineProps<{
     tipo: TipoUnidadCurricularItem;
 }>();
 
-const esActivo = computed(() => {
-    return props.tipo.status ?? (props.tipo.status_id === 1);
-});
+const esActivo = computed(() => esRegistroActivo(props.tipo));
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Dashboard', subtitle: 'Panel Principal', href: route('dashboard') },

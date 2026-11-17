@@ -10,35 +10,42 @@
  * Actualización 2026-10-21 (Visualización Predeterminada de Todas las Ofertas y TabFilter 'all'):
  * Se modificó el TabFilter para iniciar por defecto en 'all' ('Todos'), permitiendo ver todas
  * las asignaciones al entrar o al seleccionar la opción 'Todos'.
+ * - 2026-11-16: Estandarización global con <CrudActionButtons /> en reemplazo de DataActionsDropdown.
  */
-import { ref, computed } from 'vue';
 import { Head, Link, router } from '@inertiajs/vue3';
+import { Layers, Plus, X } from 'lucide-vue-next';
+import { computed } from 'vue';
 import { route } from 'ziggy-js';
-import { Plus, X } from 'lucide-vue-next';
-
-import AppLayout from '@/layouts/AppLayout.vue';
-import DataTable from '@/components/ui/DataTable.vue';
-import DataPagination from '@/components/ui/DataPagination.vue';
-import SuccessAlert from '@/components/ui/SuccessAlert.vue';
-import StatusSwitch from '@/components/ui/StatusSwitch.vue';
 import { Button } from '@/components/ui/button';
-import DataActionsDropdown from '@/components/ui/DataActionsDropdown.vue';
-import TableSkeleton from '@/components/ui/TableSkeleton.vue';
-
+import CrudActionButtons from '@/components/ui/CrudActionButtons.vue';
+import DataPagination from '@/components/ui/DataPagination.vue';
+import DataTable from '@/components/ui/DataTable.vue';
 import SearchFilter from '@/components/ui/filters/SearchFilter.vue';
 import TabFilter from '@/components/ui/filters/TabFilter.vue';
-
+import StatusSwitch from '@/components/ui/StatusSwitch.vue';
+import SuccessAlert from '@/components/ui/SuccessAlert.vue';
+import TableSkeleton from '@/components/ui/TableSkeleton.vue';
+import { useConfirmDialog } from '@/composables/useConfirmDialog';
 import { useDataFetching } from '@/composables/useDataFetching';
 import { useFlashAlert } from '@/composables/useFlashAlert';
-import { useConfirmDialog } from '@/composables/useConfirmDialog';
+import AppLayout from '@/layouts/AppLayout.vue';
+import { esActivo } from '@/lib/status';
 import type { Column } from '@/types/dataTable';
+
+interface OfertaSelectOpt {
+    id_spr?: number;
+    id_sep?: number;
+    descripcion_oferta: string;
+}
 
 const props = defineProps<{
     cohortesSede: any;
     cohortes: Array<{ id_coh: number; nombre_coh: string }>;
-    ofertasSedePnf: Array<{ id_sep: number; descripcion_oferta: string }>;
+    ofertasSedePnf: OfertaSelectOpt[];
     filters: any;
 }>();
+
+const resolverOfertaId = (o: OfertaSelectOpt) => o.id_spr ?? o.id_sep ?? 0;
 
 const { showSuccessAlert, itemId, message, closeAlert } = useFlashAlert();
 const { confirmDialog } = useConfirmDialog();
@@ -47,9 +54,9 @@ const columns: Column[] = [
     { key: 'id', label: 'Nro.', align: 'center', width: 'w-16' },
     { key: 'nombre_cos', label: 'Nombre Grupo / Sede', align: 'left' },
     { key: 'nombre_coh', label: 'Cohorte', align: 'left' },
-    { key: 'oferta_academica', label: 'Oferta Académica (Sede - PNF)', align: 'left' },
-    { key: 'status', label: 'Status', align: 'center', width: 'w-40' },
-    { key: 'actions', label: 'Acciones', align: 'center', width: 'w-64' },
+    { key: 'oferta_academica', label: 'Oferta Académica (Sede - Programa)', align: 'left' },
+    { key: 'status', label: 'Estatus', align: 'center', width: 'w-40' },
+    { key: 'actions', label: 'Acciones', align: 'center', width: 'w-36' },
 ];
 
 const {
@@ -84,10 +91,8 @@ const clearFilters = () => {
     fetchData({ page: 1 });
 };
 
-const esActivo = (v: any) => v === true || v === 1 || v === '1' || v === 't';
-
 const alternarEstatus = async (row: any) => {
-    const accion = esActivo(row.status) ? 'desactivar' : 'activar';
+    const accion = esActivo(row) ? 'desactivar' : 'activar';
     if (await confirmDialog(`¿Está seguro de que desea ${accion} el registro "${row.nombre_cos}"?`, `Confirmar ${accion}`)) {
         router.delete(route('cohorte_sede.destroy', row.id), {
             preserveScroll: true,
@@ -108,7 +113,33 @@ const alternarEstatus = async (row: any) => {
         <div class="w-full px-4 sm:px-6 lg:px-8 py-6 space-y-6">
             <SuccessAlert :show="showSuccessAlert" :id="itemId" :message="message" entity="cohorte_sede" @close="closeAlert" />
 
-            <div class="flex flex-col lg:flex-row justify-between items-stretch md:items-center gap-2 pt-2 mb-4">
+            <!-- ENCABEZADO ESTÁNDAR -->
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b pb-5 dark:border-slate-800">
+                <div class="space-y-1">
+                    <div class="flex items-center gap-2">
+                        <div class="p-2 bg-primary/10 rounded-lg text-primary">
+                            <Layers class="h-6 w-6" />
+                        </div>
+                        <h1 class="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
+                            Cohortes por Sede
+                        </h1>
+                    </div>
+                    <p class="text-sm text-muted-foreground">
+                        Distribución de cohortes de ingreso por oferta de sede y programa académico.
+                    </p>
+                </div>
+
+                <div class="flex items-center gap-2">
+                    <Button as-child size="default" class="gap-2 shadow-sm">
+                        <Link :href="route('cohorte_sede.create')">
+                            <Plus class="h-4 w-4" />
+                            Nueva Cohorte por Sede
+                        </Link>
+                    </Button>
+                </div>
+            </div>
+
+            <div class="flex flex-col lg:flex-row justify-between items-stretch md:items-center gap-2">
                 <div class="flex items-center gap-3 w-full">
                     <SearchFilter class="w-full flex-1" :model-value="filterValues.search ?? ''"
                         @update:model-value="(val: string) => setFilter('search', val)"
@@ -126,8 +157,8 @@ const alternarEstatus = async (row: any) => {
                     <select :value="filterValues.sep_id ?? 'all'"
                         class="h-9 rounded-md border border-input bg-background px-3 text-sm"
                         @change="setFilter('sep_id', ($event.target as HTMLSelectElement).value)">
-                        <option value="all">Todas las ofertas (Sede - PNF)</option>
-                        <option v-for="o in props.ofertasSedePnf" :key="o.id_sep" :value="o.id_sep">{{ o.descripcion_oferta }}</option>
+                        <option value="all">Todas las ofertas (Sede - Programa)</option>
+                        <option v-for="o in props.ofertasSedePnf" :key="resolverOfertaId(o)" :value="resolverOfertaId(o)">{{ o.descripcion_oferta }}</option>
                     </select>
 
                     <Button v-if="hasActiveFilters" variant="ghost" size="icon" class="text-red-500 h-9 w-9 shrink-0"
@@ -135,15 +166,10 @@ const alternarEstatus = async (row: any) => {
                         <X class="h-4 w-4" />
                     </Button>
 
-                    <Button as-child size="sm" class="h-9 flex-1 sm:flex-none">
-                        <Link :href="route('cohorte_sede.create')">
-                            <Plus class="h-4 w-4 mr-1" /> Nuevo
-                        </Link>
-                    </Button>
                 </div>
             </div>
 
-            <div>
+            <div class="bg-card rounded-xl border shadow-xs overflow-hidden">
                 <TableSkeleton v-if="isLoading" :columns="columns" :skeletonRows="5" />
                 <DataTable v-else :columns="columns" :data="cohortesSedeData?.data || []" :is-loading="isLoading"
                     :resultadosTotales="cohortesSedeData.total" :filtrosActivos="hasActiveFilters">
@@ -154,18 +180,18 @@ const alternarEstatus = async (row: any) => {
                             { value: 'false', label: 'Inactivos' },
                         ]" default-value="all" @update:model-value="(val: string) => setFilter('status', val)" />
                     </template>
-                    <template #status="{ row, value }">
-                        <StatusSwitch :status="value ?? row?.status" @toggle="alternarEstatus(row)" />
+                    <template #status="{ row }">
+                        <StatusSwitch :status="esActivo(row) ? 1 : 0" @toggle="alternarEstatus(row)" />
                     </template>
                     <template #actions="{ row }">
-                        <DataActionsDropdown
-                            :is-modal="false"
-                            editRoute="cohorte_sede.edit"
-                            showRoute="cohorte_sede.show"
-                            deleteRoute="cohorte_sede.destroy"
-                            :id="row.id"
-                            :status="esActivo(row.status) ? 1 : 0"
-                            @success="fetchData()"
+                        <CrudActionButtons
+                            show-route="cohorte_sede.show"
+                            edit-route="cohorte_sede.edit"
+                            delete-route="cohorte_sede.destroy"
+                            :record-id="row.id_cos ?? row.id"
+                            :record-name="row.nombre_cos"
+                            :delete-payload="{ eliminar: 1 }"
+                            @deleted="fetchData()"
                         />
                     </template>
                 </DataTable>

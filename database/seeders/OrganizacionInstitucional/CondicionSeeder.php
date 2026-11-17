@@ -2,136 +2,106 @@
 
 namespace Database\Seeders\OrganizacionInstitucional;
 
+use App\Models\OrganizacionInstitucional\Maestros\CondicionSede;
+use App\Models\OrganizacionInstitucional\Maestros\DependenciaInstitucion;
+use App\Models\OrganizacionInstitucional\Maestros\TipoCondicion;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Seeder: CondicionSeeder (Módulo 2 - Organización Institucional).
+ * Seeder: Catálogos de Organización Institucional (`condicion_sede`, `tipo_condicion`, `dependencia_institucion`).
  *
- * Propósito: Poblar los tipos de condición (ámbitos) y las condiciones funcionales
- * institucionales requeridas para sedes, dependencias y espacios académicos de la UPTP.
+ * Propósito: Poblar de forma idempotente las condiciones operativas de sede/universidad,
+ * los tipos de condición institucional y las dependencias administrativas oficiales en `sogac_mio.sql`.
+ *
+ * Historial:
+ *  - 2026-11-14: Reemplazada la tabla legacy `condicion` por `condicion_sede(id_cse)`, `tipo_condicion`
+ *    (`tco_codigo`/`tco_nombre`/`tco_estatus`) y agregado catálogo `dependencia_institucion(id_dpi)`.
  */
 class CondicionSeeder extends Seeder
 {
-    /**
-     * Ejecuta el poblado de datos iniciales.
-     */
     public function run(): void
     {
-        $now = now();
+        DB::transaction(function (): void {
+            foreach (['Pública', 'Privada', 'Nacional / MPTU'] as $nombreDpi) {
+                DependenciaInstitucion::withTrashed()->updateOrCreate(
+                    ['nombre_dpi' => $nombreDpi],
+                    ['status_id' => 1, 'deleted_at' => null]
+                );
+            }
 
-        // 1. Ámbitos / Tipos de Condición
-        $tipos = [
-            [
-                'nombre_tco'      => 'Sede Universitaria',
-                'descripcion_tco' => 'Ámbito de categorización funcional para sedes, campus y extensiones de la institución.',
-                'status'          => true,
-            ],
-            [
-                'nombre_tco'      => 'Ambiente / Aula',
-                'descripcion_tco' => 'Ámbito de categorización de espacios físicos de aprendizaje y laboratorios.',
-                'status'          => true,
-            ],
-            [
-                'nombre_tco'      => 'Régimen de Inmueble',
-                'descripcion_tco' => 'Condición jurídica o de tenencia de las instalaciones físicas (propiedad, comodato, etc.).',
-                'status'          => true,
-            ],
-        ];
-
-        foreach ($tipos as $tipo) {
-            DB::table('tipo_condicion')->updateOrInsert(
-                ['nombre_tco' => $tipo['nombre_tco']],
+            $tiposCondicion = [
                 [
-                    'descripcion_tco' => $tipo['descripcion_tco'],
-                    'status'          => $tipo['status'],
-                    'created_at'      => $now,
-                    'updated_at'      => $now,
-                ]
-            );
-        }
-
-        $idSede = DB::table('tipo_condicion')->where('nombre_tco', 'Sede Universitaria')->value('id_tco');
-        $idAula = DB::table('tipo_condicion')->where('nombre_tco', 'Ambiente / Aula')->value('id_tco');
-        $idReg  = DB::table('tipo_condicion')->where('nombre_tco', 'Régimen de Inmueble')->value('id_tco');
-
-        // 2. Condiciones específicas vinculadas
-        $condiciones = [
-            // Ámbito: Sede Universitaria
-            [
-                'nombre_cdn'      => 'Sede Principal',
-                'descripcion_cdn' => 'Sede rectoral o campus central de operaciones administrativas y académicas.',
-                'tco_id'          => $idSede,
-                'status'          => true,
-            ],
-            [
-                'nombre_cdn'      => 'Núcleo',
-                'descripcion_cdn' => 'Núcleo académico y administrativo dependiente de la universidad en una localidad.',
-                'tco_id'          => $idSede,
-                'status'          => true,
-            ],
-            [
-                'nombre_cdn'      => 'Extensión',
-                'descripcion_cdn' => 'Extensión académica universitaria operativa en un municipio o parroquia.',
-                'tco_id'          => $idSede,
-                'status'          => true,
-            ],
-            [
-                'nombre_cdn'      => 'Ambiente Municipalizado',
-                'descripcion_cdn' => 'Espacio territorial para programas formativos descentralizados.',
-                'tco_id'          => $idSede,
-                'status'          => true,
-            ],
-
-            // Ámbito: Régimen de Inmueble
-            [
-                'nombre_cdn'      => 'Propia',
-                'descripcion_cdn' => 'Instalación o inmueble perteneciente al patrimonio de la institución.',
-                'tco_id'          => $idReg,
-                'status'          => true,
-            ],
-            [
-                'nombre_cdn'      => 'Comodato',
-                'descripcion_cdn' => 'Inmueble cedido por convenio interinstitucional de uso académico sin costo.',
-                'tco_id'          => $idReg,
-                'status'          => true,
-            ],
-            [
-                'nombre_cdn'      => 'Arrendada',
-                'descripcion_cdn' => 'Inmueble en régimen de arrendamiento para actividades institucionales.',
-                'tco_id'          => $idReg,
-                'status'          => true,
-            ],
-
-            // Ámbito: Ambiente / Aula
-            [
-                'nombre_cdn'      => 'Operativa',
-                'descripcion_cdn' => 'Espacio en condiciones óptimas para impartir actividades presenciales.',
-                'tco_id'          => $idAula,
-                'status'          => true,
-            ],
-            [
-                'nombre_cdn'      => 'En Mantenimiento',
-                'descripcion_cdn' => 'Espacio físico temporalmente no disponible por acondicionamiento.',
-                'tco_id'          => $idAula,
-                'status'          => false,
-            ],
-        ];
-
-        foreach ($condiciones as $cond) {
-            DB::table('condicion')->updateOrInsert(
-                [
-                    'nombre_cdn' => $cond['nombre_cdn'],
-                    'tco_id'     => $cond['tco_id'],
+                    'tco_codigo'      => 'SEDE',
+                    'tco_nombre'      => 'Sede Universitaria',
+                    'tco_descripcion' => 'Ámbito de categorización funcional para sedes, campus y extensiones.',
                 ],
                 [
-                    'descripcion_cdn' => $cond['descripcion_cdn'],
-                    'status'          => $cond['status'],
-                    'created_at'      => $now,
-                    'updated_at'      => $now,
-                ]
-            );
-        }
+                    'tco_codigo'      => 'AULA',
+                    'tco_nombre'      => 'Ambiente / Aula',
+                    'tco_descripcion' => 'Ámbito de categorización de espacios físicos de aprendizaje y laboratorios.',
+                ],
+                [
+                    'tco_codigo'      => 'INMUEBLE',
+                    'tco_nombre'      => 'Régimen de Inmueble',
+                    'tco_descripcion' => 'Condición jurídica o de tenencia de las instalaciones físicas.',
+                ],
+            ];
+
+            foreach ($tiposCondicion as $tipo) {
+                TipoCondicion::withTrashed()->updateOrCreate(
+                    ['tco_codigo' => $tipo['tco_codigo']],
+                    [
+                        'tco_nombre'          => $tipo['tco_nombre'],
+                        'tco_descripcion'     => $tipo['tco_descripcion'],
+                        'tco_cod_universidad' => 1,
+                        'tco_estatus'         => 'A',
+                        'deleted_at'          => null,
+                    ]
+                );
+            }
+
+            $condicionesSede = [
+                [
+                    'nombre_cse'      => 'Sede Principal',
+                    'descripcion_cse' => 'Sede rectoral o campus central de operaciones administrativas y académicas.',
+                ],
+                [
+                    'nombre_cse'      => 'Núcleo',
+                    'descripcion_cse' => 'Núcleo académico y administrativo dependiente de la universidad en una localidad.',
+                ],
+                [
+                    'nombre_cse'      => 'Extensión',
+                    'descripcion_cse' => 'Extensión académica universitaria operativa en un municipio o parroquia.',
+                ],
+                [
+                    'nombre_cse'      => 'Ambiente Municipalizado',
+                    'descripcion_cse' => 'Espacio territorial para programas formativos descentralizados.',
+                ],
+                [
+                    'nombre_cse'      => 'Propia',
+                    'descripcion_cse' => 'Instalación perteneciente al patrimonio inmobiliario de la universidad.',
+                ],
+                [
+                    'nombre_cse'      => 'Comodato',
+                    'descripcion_cse' => 'Inmueble cedido por convenio interinstitucional de uso académico.',
+                ],
+                [
+                    'nombre_cse'      => 'Arrendada',
+                    'descripcion_cse' => 'Inmueble en régimen de arrendamiento institucional.',
+                ],
+            ];
+
+            foreach ($condicionesSede as $cond) {
+                CondicionSede::withTrashed()->updateOrCreate(
+                    ['nombre_cse' => $cond['nombre_cse']],
+                    [
+                        'descripcion_cse' => $cond['descripcion_cse'],
+                        'status_id'       => 1,
+                        'deleted_at'      => null,
+                    ]
+                );
+            }
+        });
     }
 }
-

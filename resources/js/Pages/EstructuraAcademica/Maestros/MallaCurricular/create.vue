@@ -3,60 +3,83 @@
  * Vista Standalone: Creación de Malla Curricular (Módulo: Estructura Académica / Currículo).
  *
  * Propósito: Permite registrar una nueva Malla Curricular (plan de estudios) mediante useForm de Inertia,
- * cargando de forma reactiva las unidades curriculares del PNF seleccionado, estructuradas por trayectos y semestres,
+ * cargando de forma reactiva las unidades curriculares del Programa seleccionado, estructuradas por trayectos y semestres,
  * e incorporando los requisitos globales de egreso para TSU e Ingeniería/Licenciatura.
  *
- * Actualización 2026-11-08 (Rediseño Interactivo según Croquis de "Crear Malla"):
- * Se implementó el constructor dinámico de Malla Curricular dividido en:
- * 1. Cabecera y Datos Generales (Programa/PNF, Nombre de la Malla, Versión del Pensum, Número de Cohorte, Fecha y Observaciones).
- * 2. Configuración Dinámica de Trayectos con botón [+ Agregar Trayecto] y selector [Agregar Tipo Periodo] (Semestres, Trimestres o Años).
- * 3. Detalle de Unidades Curriculares por Semestre (Semestre 1 / Semestre 2) con botón [+ Agregar Unidad] y tabla ordenada (N°, Código, Nombre).
+ * Historial:
+ *  - 2026-11-08: Rediseño interactivo del constructor dinámico de trayectos, tipo de lapso y unidades por período.
+ *  - 2026-11-14: Alineación estricta a `sogac_mio.sql` (`programa.id_prg`, `tipo_lapso.id_tla`, `total_credito_*`,
+ *    `total_horas_*`, `total_unidades_*`) reutilizando adaptadores compartidos de `@/lib/academico`.
+ *  - 2026-11-16: Estandarización del pie de formulario con <CrudFormFooter />.
+ *  - 2026-11-16: Corrección de diseño del panel inline de inserción de unidades en semestres paralelos
+ *    (eliminación de `overflow-hidden`, apilamiento vertical con `w-full min-w-0`, grilla `xl:grid-cols-2`,
+ *    `pb-24` inferior y auto-scroll con `scrollIntoView` al abrir "+ Agregar Unidad").
+ *  - 2026-11-16: Ampliación del selector inline y tabla por semestre con Eje Curricular (`ecu_id`),
+ *    horas HEA/HEI/HTE con cálculo automático, Duración (1 o 2 semestres) y Nota Aprobatoria validada.
+ *  - 2026-11-16: Reemplazo del filtro + `<select>` separado por el buscador autocompletado
+ *    interactivo `<UnidadCurricularCombobox />` con navegación por teclado y prioridad por código.
  */
-import { ref, computed, watch, nextTick } from 'vue';
 import { Head, Link, useForm } from '@inertiajs/vue3';
-import { route } from 'ziggy-js';
 import axios from 'axios';
-import { toast } from 'vue-sonner';
-import AppLayout from '@/layouts/AppLayout.vue';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import type { BreadcrumbItem } from '@/types/navigation';
 import {
-    Network,
-    ArrowLeft,
-    Save,
     AlertCircle,
-    CheckCircle2,
-    GraduationCap,
+    ArrowLeft,
     Award,
     BookOpen,
-    Loader2,
-    Layers,
-    Sparkles,
-    Plus,
-    Trash2,
     Calendar,
-    Search,
     Check,
+    CheckCircle2,
+    GraduationCap,
+    Layers,
+    Loader2,
+    Network,
+    Plus,
+    Search,
+    Sparkles,
+    Trash2,
     X,
 } from 'lucide-vue-next';
-
-interface PnfItem {
-    id_pnf: number;
-    codigo_pnf?: string | null;
-    nombre_pnf: string;
-}
-
-interface TipoPeriodoItem {
-    id_tpd: number;
-    nombre_tpd: string;
-    codigo_tpd?: string | null;
-    nomenclatura?: string | null;
-    duracion_semanas_tpd?: number | null;
-}
+import { computed, nextTick, ref, watch } from 'vue';
+import { toast } from 'vue-sonner';
+import { route } from 'ziggy-js';
+import UnidadCurricularCombobox from '@/components/Academico/UnidadCurricularCombobox.vue';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
+import CrudFormFooter from '@/components/ui/CrudFormFooter.vue';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import AppLayout from '@/layouts/AppLayout.vue';
+import {
+    construirPeriodosParaTrayecto as construirPeriodosLapso,
+    esNotaValidaEnEscala,
+    inicializarParametrosPeriodo,
+    obtenerCodigoPrograma,
+    obtenerConfigTipoLapso,
+    obtenerDuracionTipoLapso,
+    obtenerErrorNotaPeriodo,
+    obtenerIdPrograma,
+    obtenerIdTipoLapso,
+    obtenerNombrePrograma,
+    obtenerNombreTipoLapso,
+    obtenerNomenclaturaTipoLapso,
+    obtenerTipoLapsoSemestralPorDefecto,
+    recalcularHtePeriodo,
+    recalcularHteUnidad,
+    resolverEscalaPrograma,
+    ROMANOS_TRAYECTO as ROMANOS,
+} from '@/lib/academico';
+import type {
+    EjeCurricularCatalogoItem,
+    EscalaMedicionCatalogoItem,
+    PeriodoContainer,
+    ProgramaCatalogoItem,
+    TipoLapsoCatalogoItem,
+    TrayectoBuilderBlock,
+    UnidadCatalogoItem,
+    UnidadSeleccionadaRow,
+} from '@/lib/academico';
+import type { BreadcrumbItem } from '@/types/navigation';
 
 interface CohorteItem {
     id_coh: number;
@@ -64,64 +87,35 @@ interface CohorteItem {
     fecha_inicio_coh?: string | null;
 }
 
-interface UnidadCatalogoItem {
-    id_unc: number;
-    codigo_unc: string;
-    nombre_unc: string;
-    tipo: string;
-    tuc_id?: number | null;
-    tra_id: number;
-    semestre_unc: number;
-    uc: number;
-    htea: number;
-    htei: number;
-    thte: number;
-}
-
-interface UnidadSeleccionadaRow {
-    unc_id: number;
-    codigo: string;
-    nombre: string;
-    tipo: string;
-    tuc_id?: number | null;
-    uc: number;
-    htea: number;
-    htei: number;
-    thte: number;
-    duracion_semanas: number;
-}
-
-interface PeriodoContainer {
-    numero: number; // 1, 2, 3 (índice dentro del trayecto)
-    semestreGlobal: number; // 1..8 (Semestre 1 y 2 en Trayecto I, Semestre 3 y 4 en Trayecto II, etc.)
-    etiqueta: string; // "Semestre 1", "Semestre 2", "Semestre 3", "Semestre 4", etc.
-    busquedaActiva: boolean;
-    terminoBusqueda: string;
-    uncIdSeleccionada: number | string;
-    unidades: UnidadSeleccionadaRow[];
-}
-
-interface TrayectoBuilderBlock {
-    uid: string;
-    numero_orden_tra: number; // 1 = Trayecto I, 2 = Trayecto II, etc.
-    nombre_tra: string; // "Trayecto I", "Trayecto II", etc.
-    tpd_id: number;
-    tipo_periodo_nombre: string; // "Semestre", "Trimestre", "Año"
-    periodos: PeriodoContainer[];
-}
-
 const props = withDefaults(
     defineProps<{
-        pnfs: PnfItem[];
-        tiposPeriodo?: TipoPeriodoItem[];
+        programas?: ProgramaCatalogoItem[];
+        pnfs?: ProgramaCatalogoItem[];
+        tiposLapso?: TipoLapsoCatalogoItem[];
+        tiposPeriodo?: TipoLapsoCatalogoItem[];
         cohortes?: CohorteItem[];
+        ejes?: EjeCurricularCatalogoItem[];
+        escalas?: EscalaMedicionCatalogoItem[];
         unidadesCatalogo?: UnidadCatalogoItem[];
     }>(),
     {
+        programas: () => [],
+        pnfs: () => [],
+        tiposLapso: () => [],
         tiposPeriodo: () => [],
         cohortes: () => [],
+        ejes: () => [],
+        escalas: () => [],
         unidadesCatalogo: () => [],
     }
+);
+
+const listaProgramas = computed<ProgramaCatalogoItem[]>(() =>
+    props.programas.length ? props.programas : props.pnfs
+);
+
+const catalogoTiposLapso = computed<TipoLapsoCatalogoItem[]>(() =>
+    props.tiposLapso.length ? props.tiposLapso : props.tiposPeriodo
 );
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -131,26 +125,12 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Crear Malla', subtitle: 'Nuevo Registro', href: route('academico.malla-curricular.create') },
 ];
 
-const ROMANOS: Record<number, string> = {
-    0: 'Inicial',
-    1: 'I',
-    2: 'II',
-    3: 'III',
-    4: 'IV',
-    5: 'V',
-};
+// Determinar el Tipo de Lapso Semestral por defecto
+const tipoLapsoDefaultId = computed<number>(() =>
+    obtenerTipoLapsoSemestralPorDefecto(catalogoTiposLapso.value)
+);
 
-// Determinar el Tipo de Período Semestral por defecto
-const tipoPeriodoDefaultId = computed<number>(() => {
-    const semestral = props.tiposPeriodo.find(
-        (t) =>
-            (t.nomenclatura && t.nomenclatura.toLowerCase().includes('semestr')) ||
-            t.nombre_tpd.toLowerCase().includes('semestr')
-    );
-    return semestral ? semestral.id_tpd : props.tiposPeriodo[0]?.id_tpd ?? 4;
-});
-
-const tipoPeriodoGlobalId = ref<number>(tipoPeriodoDefaultId.value);
+const tipoLapsoGlobalId = ref<number>(tipoLapsoDefaultId.value);
 const trayectos = ref<TrayectoBuilderBlock[]>([]);
 const cargandoSugerencia = ref(false);
 const mostrarRequisitosEgreso = ref(false);
@@ -178,88 +158,31 @@ const form = useForm({
     version_pensum_mac: '',
     fecha_aprobacion_mac: new Date().toISOString().slice(0, 10),
     observacion_mac: '',
-    pnf_id: '' as string | number,
+    prg_id: '' as string | number,
 
     // Requisitos globales TSU
-    creditos_minimos_tsu_mac: '' as string | number,
-    horas_minimas_tsu_mac: '' as string | number,
-    materias_obligatorias_tsu_mac: '' as string | number,
+    total_credito_tsu_mac: '' as string | number,
+    total_horas_tsu_mac: '' as string | number,
+    total_unidades_tsu_mac: '' as string | number,
 
     // Requisitos globales Ingeniería
-    creditos_minimos_ing_mac: '' as string | number,
-    horas_minimas_ing_mac: '' as string | number,
-    materias_obligatorias_ing_mac: '' as string | number,
-    creditos_minimos_prosecucion_mac: '' as string | number,
+    total_credito_ing_mac: '' as string | number,
+    total_horas_ing_mac: '' as string | number,
+    total_unidades_ing_mac: '' as string | number,
+    total_credito_prosecucion_mac: '' as string | number,
 
     unidades_seleccionadas: [] as any[],
 });
 
-/**
- * Obtiene la configuración (cantidad de sub-períodos y etiqueta) según el Tipo de Período (`tpd_id`).
- */
-const obtenerConfigTipoPeriodo = (tpdId: number) => {
-    const item = props.tiposPeriodo.find((t) => Number(t.id_tpd) === Number(tpdId));
-    const texto = `${item?.nomenclatura ?? ''} ${item?.nombre_tpd ?? ''}`.toLowerCase();
+const obtenerConfigTipoPeriodo = (tlaId: number) =>
+    obtenerConfigTipoLapso(catalogoTiposLapso.value, tlaId);
 
-    if (texto.includes('trimestr')) {
-        return { cantidad: 3, singular: 'Trimestre', duracion: item?.duracion_semanas_tpd || 12 };
-    }
-    if (texto.includes('anual') || texto.includes('año') || texto.includes('ano')) {
-        return { cantidad: 1, singular: 'Año / Período Anual', duracion: item?.duracion_semanas_tpd || 36 };
-    }
-    return { cantidad: 2, singular: 'Semestre', duracion: item?.duracion_semanas_tpd || 18 };
-};
-
-/**
- * Construye los contenedores de períodos con numeración correlativa por Trayecto:
- * - Trayecto I   -> Semestre 1, Semestre 2 (o Trimestre 1, 2, 3 / Año 1)
- * - Trayecto II  -> Semestre 3, Semestre 4 (o Trimestre 4, 5, 6 / Año 2)
- * - Trayecto III -> Semestre 5, Semestre 6 (o Trimestre 7, 8, 9 / Año 3)
- * - Trayecto IV  -> Semestre 7, Semestre 8 (o Trimestre 10, 11, 12 / Año 4)
- */
 const construirPeriodosParaTrayecto = (
-    tpdId: number,
+    tlaId: number,
     numeroOrdenTra = 1,
     periodosPrevios: PeriodoContainer[] = []
-): PeriodoContainer[] => {
-    const cfg = obtenerConfigTipoPeriodo(tpdId);
-    const nuevos: PeriodoContainer[] = [];
-
-    if (numeroOrdenTra <= 0) {
-        const previo = periodosPrevios[0];
-        return [
-            {
-                numero: 1,
-                semestreGlobal: 0,
-                etiqueta: 'Período Inicial',
-                busquedaActiva: previo ? previo.busquedaActiva : false,
-                terminoBusqueda: '',
-                uncIdSeleccionada: '',
-                unidades: previo ? [...previo.unidades] : [],
-            },
-        ];
-    }
-
-    for (let i = 1; i <= cfg.cantidad; i++) {
-        const previo = periodosPrevios.find((p) => p.numero === i);
-        const semestreGlobal = (numeroOrdenTra - 1) * cfg.cantidad + i;
-        const etiqueta =
-            cfg.cantidad === 1
-                ? `Año ${numeroOrdenTra} (Período ${semestreGlobal})`
-                : `${cfg.singular} ${semestreGlobal}`;
-
-        nuevos.push({
-            numero: i,
-            semestreGlobal,
-            etiqueta,
-            busquedaActiva: previo ? previo.busquedaActiva : false,
-            terminoBusqueda: '',
-            uncIdSeleccionada: '',
-            unidades: previo ? [...previo.unidades] : [],
-        });
-    }
-    return nuevos;
-};
+): PeriodoContainer[] =>
+    construirPeriodosLapso(catalogoTiposLapso.value, tlaId, numeroOrdenTra, periodosPrevios);
 
 /**
  * Crea un nuevo bloque de Trayecto (Trayecto I, Trayecto II, etc.).
@@ -282,18 +205,18 @@ const agregarTrayecto = (ordenPersonalizado?: number, silencioso = false) => {
         return;
     }
 
-    const tpdId = tipoPeriodoGlobalId.value || tipoPeriodoDefaultId.value;
-    const cfg = obtenerConfigTipoPeriodo(tpdId);
+    const tlaId = tipoLapsoGlobalId.value || tipoLapsoDefaultId.value;
+    const cfg = obtenerConfigTipoPeriodo(tlaId);
     const etiquetaRomana = ROMANOS[siguienteOrden] ?? String(siguienteOrden);
     const nombreTra = siguienteOrden === 0 ? 'Trayecto Inicial' : `Trayecto ${etiquetaRomana}`;
     const uid = `tra-${siguienteOrden}-${Date.now()}`;
-    const periodosCreados = construirPeriodosParaTrayecto(tpdId, siguienteOrden);
+    const periodosCreados = construirPeriodosParaTrayecto(tlaId, siguienteOrden);
 
     trayectos.value.push({
         uid,
         numero_orden_tra: siguienteOrden,
         nombre_tra: nombreTra,
-        tpd_id: tpdId,
+        tla_id: tlaId,
         tipo_periodo_nombre: cfg.singular,
         periodos: periodosCreados,
     });
@@ -328,17 +251,17 @@ const eliminarTrayecto = (uid: string) => {
 };
 
 /**
- * Cambia el Tipo de Período (Semestres, Trimestres, Años) de un Trayecto específico.
+ * Cambia el Tipo de Lapso (Semestres, Trimestres, Años) de un Trayecto específico.
  */
-const cambiarTipoPeriodoTrayecto = (trayecto: TrayectoBuilderBlock, nuevoTpdId: number, notificar = true) => {
-    trayecto.tpd_id = Number(nuevoTpdId);
-    const cfg = obtenerConfigTipoPeriodo(trayecto.tpd_id);
+const cambiarTipoPeriodoTrayecto = (trayecto: TrayectoBuilderBlock, nuevoTlaId: number, notificar = true) => {
+    trayecto.tla_id = Number(nuevoTlaId);
+    const cfg = obtenerConfigTipoPeriodo(trayecto.tla_id);
     trayecto.tipo_periodo_nombre = cfg.singular;
-    trayecto.periodos = construirPeriodosParaTrayecto(trayecto.tpd_id, trayecto.numero_orden_tra, trayecto.periodos);
+    trayecto.periodos = construirPeriodosParaTrayecto(trayecto.tla_id, trayecto.numero_orden_tra, trayecto.periodos);
     if (notificar) {
         const nombresPeriodos = trayecto.periodos.map((p) => p.etiqueta).join(', ');
         emitirNotificacionLocal(
-            'Tipo de Período Actualizado',
+            'Tipo de Lapso Actualizado',
             `${trayecto.nombre_tra} ahora contiene: ${nombresPeriodos}.`,
             'info'
         );
@@ -346,15 +269,15 @@ const cambiarTipoPeriodoTrayecto = (trayecto: TrayectoBuilderBlock, nuevoTpdId: 
 };
 
 /**
- * Aplica el Tipo de Período global a todos los trayectos creados.
+ * Aplica el Tipo de Lapso global a todos los trayectos creados.
  */
 const aplicarTipoPeriodoGlobal = () => {
-    const cfg = obtenerConfigTipoPeriodo(tipoPeriodoGlobalId.value);
+    const cfg = obtenerConfigTipoPeriodo(tipoLapsoGlobalId.value);
     trayectos.value.forEach((tr) => {
-        cambiarTipoPeriodoTrayecto(tr, tipoPeriodoGlobalId.value, false);
+        cambiarTipoPeriodoTrayecto(tr, tipoLapsoGlobalId.value, false);
     });
     emitirNotificacionLocal(
-        'Tipo de Período Aplicado',
+        'Tipo de Lapso Aplicado',
         `Todos los trayectos se actualizaron a modalidad ${cfg.singular} (${cfg.cantidad} por trayecto).`,
         'info'
     );
@@ -367,11 +290,21 @@ if (trayectos.value.length === 0) {
 
 /**
  * Filtra el catálogo de Unidades Curriculares para el buscador de [+ Agregar Unidad].
- * Prioriza las materias del PNF seleccionado y evita duplicar materias ya insertadas en la malla.
+ * Prioriza las materias del Programa seleccionado y evita duplicar materias ya insertadas en la malla.
  */
-const pnfSeleccionadoObj = computed(() =>
-    props.pnfs.find((p) => Number(p.id_pnf) === Number(form.pnf_id))
+const programaSeleccionadoObj = computed(() =>
+    listaProgramas.value.find((p) => obtenerIdPrograma(p) === Number(form.prg_id))
 );
+
+const escalaProgramaActual = computed(() =>
+    resolverEscalaPrograma(programaSeleccionadoObj.value, props.escalas)
+);
+
+const esNotaValida = (valor: number | string | null | undefined): boolean =>
+    esNotaValidaEnEscala(valor, escalaProgramaActual.value);
+
+const mensajeErrorNotaPeriodo = (periodo: PeriodoContainer): string | null =>
+    obtenerErrorNotaPeriodo(periodo, escalaProgramaActual.value);
 
 const idsUnidadesYaEnMalla = computed<Set<number>>(() => {
     const set = new Set<number>();
@@ -383,52 +316,52 @@ const idsUnidadesYaEnMalla = computed<Set<number>>(() => {
     return set;
 });
 
-const obtenerUnidadesDisponiblesParaPeriodo = (periodo: PeriodoContainer) => {
-    const q = periodo.terminoBusqueda.trim().toLowerCase();
-    const prefix = pnfSeleccionadoObj.value?.codigo_pnf
-        ? pnfSeleccionadoObj.value.codigo_pnf.substring(0, 3).toUpperCase()
-        : null;
+const codigoProgramaPrefix = computed(() => {
+    const codigoPrograma = obtenerCodigoPrograma(programaSeleccionadoObj.value);
+    return codigoPrograma ? codigoPrograma.substring(0, 3).toUpperCase() : null;
+});
 
-    const disponibles = props.unidadesCatalogo.filter((u) => {
-        if (idsUnidadesYaEnMalla.value.has(Number(u.id_unc))) {
-            return false;
-        }
-        if (!q) {
-            return true;
-        }
-        return (
-            u.codigo_unc.toLowerCase().includes(q) ||
-            u.nombre_unc.toLowerCase().includes(q)
-        );
-    });
-
-    // Ordenar poniendo primero las que corresponden exactamente al semestreGlobal del período y al PNF activo
-    return [...disponibles].sort((a, b) => {
-        const aSem = Number(a.semestre_unc) === Number(periodo.semestreGlobal) ? 0 : 1;
-        const bSem = Number(b.semestre_unc) === Number(periodo.semestreGlobal) ? 0 : 1;
-        if (aSem !== bSem) return aSem - bSem;
-
-        if (prefix) {
-            const aMatch = a.codigo_unc.toUpperCase().startsWith(prefix) ? 0 : 1;
-            const bMatch = b.codigo_unc.toUpperCase().startsWith(prefix) ? 0 : 1;
-            if (aMatch !== bMatch) return aMatch - bMatch;
-        }
-        return a.codigo_unc.localeCompare(b.codigo_unc);
-    });
+/**
+ * Precarga horas, eje, duración y nota aprobatoria al seleccionar una Unidad Curricular del catálogo.
+ */
+const onSeleccionarUnidadCatalogo = (periodo: PeriodoContainer, item?: UnidadCatalogoItem | null) => {
+    const uCat =
+        item ??
+        props.unidadesCatalogo.find((u) => Number(u.id_unc) === Number(periodo.uncIdSeleccionada));
+    if (uCat) {
+        inicializarParametrosPeriodo(periodo, uCat, escalaProgramaActual.value, props.ejes);
+    }
 };
 
 /**
- * Abre el selector inline para agregar una unidad curricular dentro de un Semestre/Período.
+ * Ajusta las semanas estimadas al cambiar la duración en semestres dentro de una fila.
  */
-const abrirSelectorUnidad = (periodo: PeriodoContainer) => {
+const onCambiarDuracionFila = (trayecto: TrayectoBuilderBlock, unidad: UnidadSeleccionadaRow) => {
+    const cfg = obtenerConfigTipoPeriodo(trayecto.tla_id);
+    const semestres = unidad.duracion_semestres === 2 ? 2 : 1;
+    unidad.duracion_semestres = semestres;
+    unidad.duracion_semanas = (cfg.duracion || 18) * semestres;
+};
+
+/**
+ * Abre el selector inline con el buscador autocompletado enfocado y visible.
+ */
+const abrirSelectorUnidad = (trayecto: TrayectoBuilderBlock, periodo: PeriodoContainer) => {
     periodo.busquedaActiva = true;
     periodo.terminoBusqueda = '';
-    const disponibles = obtenerUnidadesDisponiblesParaPeriodo(periodo);
-    periodo.uncIdSeleccionada = disponibles[0]?.id_unc ?? '';
+    periodo.uncIdSeleccionada = '';
+    inicializarParametrosPeriodo(periodo, undefined, escalaProgramaActual.value, props.ejes);
+
+    nextTick(() => {
+        const panel = document.getElementById(`selector-${trayecto.uid}-${periodo.numero}`);
+        panel?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        const inputEl = document.getElementById(`buscar-uc-${trayecto.uid}-${periodo.numero}`);
+        inputEl?.focus({ preventScroll: true });
+    });
 };
 
 /**
- * Inserta la Unidad Curricular elegida dentro de la tabla del Semestre/Período.
+ * Inserta la Unidad Curricular elegida con sus parámetros académicos en la tabla del Semestre/Período.
  */
 const confirmarAgregarUnidad = (trayecto: TrayectoBuilderBlock, periodo: PeriodoContainer, itemDirecto?: UnidadCatalogoItem) => {
     const catalogoItem =
@@ -441,7 +374,20 @@ const confirmarAgregarUnidad = (trayecto: TrayectoBuilderBlock, periodo: Periodo
         return;
     }
 
-    const cfg = obtenerConfigTipoPeriodo(trayecto.tpd_id);
+    if (mensajeErrorNotaPeriodo(periodo)) {
+        toast.error('Nota aprobatoria fuera de rango', {
+            description: mensajeErrorNotaPeriodo(periodo) ?? undefined,
+        });
+        return;
+    }
+
+    const cfg = obtenerConfigTipoPeriodo(trayecto.tla_id);
+    const duracionSemestres = periodo.duracionSemestresSeleccionada === 2 ? 2 : 1;
+    const htea = Math.max(0, Math.trunc(Number(periodo.hteaSeleccionado) || 0));
+    const htei = Math.max(0, Math.trunc(Number(periodo.hteiSeleccionado) || 0));
+    const thte = Math.max(0, Math.trunc(Number(periodo.thteSeleccionado) || (htea + htei)));
+    const ecuId = periodo.ecuIdSeleccionado ? Number(periodo.ecuIdSeleccionado) : null;
+    const notaAprobatoria = Number(periodo.notaAprobatoriaSeleccionada);
 
     periodo.unidades.push({
         unc_id: catalogoItem.id_unc,
@@ -449,11 +395,15 @@ const confirmarAgregarUnidad = (trayecto: TrayectoBuilderBlock, periodo: Periodo
         nombre: catalogoItem.nombre_unc,
         tipo: catalogoItem.tipo,
         tuc_id: catalogoItem.tuc_id ?? null,
+        ecu_id: ecuId,
+        esm_id: escalaProgramaActual.value.esm_id,
         uc: catalogoItem.uc || 3,
-        htea: catalogoItem.htea || 3,
-        htei: catalogoItem.htei || 3,
-        thte: catalogoItem.thte || 6,
-        duracion_semanas: cfg.duracion || 18,
+        htea,
+        htei,
+        thte,
+        duracion_semestres: duracionSemestres,
+        duracion_semanas: (cfg.duracion || 18) * duracionSemestres,
+        nota_minima_aprobatoria_mcd: notaAprobatoria,
     });
 
     emitirNotificacionLocal(
@@ -461,13 +411,17 @@ const confirmarAgregarUnidad = (trayecto: TrayectoBuilderBlock, periodo: Periodo
         `[${catalogoItem.codigo_unc}] ${catalogoItem.nombre_unc} insertada en ${periodo.etiqueta} (${trayecto.nombre_tra}).`
     );
 
-    // Preparar siguiente selección o cerrar si no quedan
-    const restantes = obtenerUnidadesDisponiblesParaPeriodo(periodo);
-    if (restantes.length > 0) {
-        periodo.uncIdSeleccionada = restantes[0].id_unc;
+    // Limpiar buscador para agregar otra unidad o cerrar si ya se asignaron todas
+    periodo.uncIdSeleccionada = '';
+    periodo.terminoBusqueda = '';
+    const quedanDisponibles = props.unidadesCatalogo.some((u) => !idsUnidadesYaEnMalla.value.has(Number(u.id_unc)));
+    if (quedanDisponibles) {
+        inicializarParametrosPeriodo(periodo, undefined, escalaProgramaActual.value, props.ejes);
+        nextTick(() => {
+            document.getElementById(`buscar-uc-${trayecto.uid}-${periodo.numero}`)?.focus({ preventScroll: true });
+        });
     } else {
         periodo.busquedaActiva = false;
-        periodo.uncIdSeleccionada = '';
     }
 };
 
@@ -487,19 +441,19 @@ const eliminarUnidadDePeriodo = (periodo: PeriodoContainer, index: number) => {
 };
 
 /**
- * Carga sugerida opcional desde el endpoint del PNF y la distribuye en la estructura de Trayectos y Semestres.
+ * Carga sugerida opcional desde el endpoint del Programa y la distribuye en la estructura de Trayectos y Semestres.
  */
 const autocompletarDesdeCatalogoPnf = async () => {
-    if (!form.pnf_id) return;
+    if (!form.prg_id) return;
     cargandoSugerencia.value = true;
     try {
-        let endpoint = `/academico/malla-curricular/pnf/${form.pnf_id}/unidades`;
+        let endpoint = `/academico/malla-curricular/pnf/${form.prg_id}/unidades`;
         try {
             if (typeof route === 'function') {
-                endpoint = route('academico.malla-curricular.unidades-pnf', { id: form.pnf_id });
+                endpoint = route('academico.malla-curricular.unidades-pnf', { id: form.prg_id });
             }
         } catch {
-            endpoint = `/academico/malla-curricular/pnf/${form.pnf_id}/unidades`;
+            endpoint = `/academico/malla-curricular/pnf/${form.prg_id}/unidades`;
         }
 
         const { data } = await axios.get(endpoint);
@@ -512,13 +466,12 @@ const autocompletarDesdeCatalogoPnf = async () => {
             mapaTrayectos.set(trActual.numero_orden_tra, trActual);
         });
 
-        const tpdId = tipoPeriodoGlobalId.value || tipoPeriodoDefaultId.value;
-        const cfg = obtenerConfigTipoPeriodo(tpdId);
+        const tlaId = tipoLapsoGlobalId.value || tipoLapsoDefaultId.value;
+        const cfg = obtenerConfigTipoPeriodo(tlaId);
         let agregadasCount = 0;
 
-        const prefix = pnfSeleccionadoObj.value?.codigo_pnf
-            ? pnfSeleccionadoObj.value.codigo_pnf.substring(0, 3).toUpperCase()
-            : null;
+        const codigoPrograma = obtenerCodigoPrograma(programaSeleccionadoObj.value);
+        const prefix = codigoPrograma ? codigoPrograma.substring(0, 3).toUpperCase() : null;
 
         // Asignar en cada Trayecto y Semestre (Semestre 1, 2, 3, 4, 5, 6, 7, 8) las unidades correspondientes a ese semestre
         Array.from(mapaTrayectos.values()).forEach((trBlock) => {
@@ -537,17 +490,23 @@ const autocompletarDesdeCatalogoPnf = async () => {
                         )
                     );
                     if (!yaExisteEnMalla) {
+                        const durSem = uCat.duracion_semestres === 2 ? 2 : 1;
                         perContainer.unidades.push({
                             unc_id: uCat.id_unc,
                             codigo: uCat.codigo_unc,
                             nombre: uCat.nombre_unc,
                             tipo: uCat.tipo || 'Regular',
                             tuc_id: uCat.tuc_id ?? null,
+                            ecu_id: uCat.ecu_id ?? (props.ejes[0]?.id_ecu ?? null),
+                            esm_id: escalaProgramaActual.value.esm_id,
                             uc: Number(uCat.uc) || 3,
                             htea: Number(uCat.htea) || 3,
                             htei: Number(uCat.htei) || 3,
                             thte: Number(uCat.thte) || 6,
-                            duracion_semanas: cfg.duracion || 18,
+                            duracion_semestres: durSem,
+                            duracion_semanas: (cfg.duracion || 18) * durSem,
+                            nota_minima_aprobatoria_mcd:
+                                uCat.nota_aprobatoria ?? escalaProgramaActual.value.notaAprobatoria,
                         });
                         agregadasCount++;
                     }
@@ -567,14 +526,14 @@ const autocompletarDesdeCatalogoPnf = async () => {
     }
 };
 
-// Autocompletar sugerencia de Nombre de Malla si está vacío al seleccionar PNF
+// Autocompletar sugerencia de Nombre de Malla si está vacío al seleccionar Programa
 watch(
-    () => form.pnf_id,
+    () => form.prg_id,
     (val) => {
         if (!val) return;
-        const pnf = props.pnfs.find((p) => Number(p.id_pnf) === Number(val));
-        if (pnf && !form.nombre_mac.trim()) {
-            form.nombre_mac = `Malla Curricular ${pnf.nombre_pnf}`;
+        const prog = listaProgramas.value.find((p) => obtenerIdPrograma(p) === Number(val));
+        if (prog && !form.nombre_mac.trim()) {
+            form.nombre_mac = `Malla Curricular ${obtenerNombrePrograma(prog)}`;
         }
     }
 );
@@ -602,16 +561,23 @@ const unidadesPlanas = computed(() => {
                     nombre: u.nombre,
                     tipo: u.tipo,
                     tuc_id: u.tuc_id ?? null,
+                    ecu_id: u.ecu_id ?? null,
+                    esm_id: u.esm_id ?? escalaProgramaActual.value.esm_id,
                     numero_orden_tra: tr.numero_orden_tra,
-                    tpd_id: tr.tpd_id,
+                    tla_id: tr.tla_id,
                     semestre: semestreGlobal > 0 ? semestreGlobal : per.numero,
                     periodo_local: per.numero,
                     etapa,
                     uc: Number(u.uc) || 3,
-                    htea: Number(u.htea) || 3,
-                    htei: Number(u.htei) || 3,
-                    thte: Number(u.thte) || 6,
+                    htea: Math.max(0, Number(u.htea) || 0),
+                    htei: Math.max(0, Number(u.htei) || 0),
+                    thte: Math.max(0, Number(u.thte) || 0),
+                    duracion_semestres: u.duracion_semestres === 2 ? 2 : 1,
                     duracion_semanas: Number(u.duracion_semanas) || 18,
+                    nota_minima_aprobatoria_mcd:
+                        u.nota_minima_aprobatoria_mcd !== null && u.nota_minima_aprobatoria_mcd !== undefined
+                            ? Number(u.nota_minima_aprobatoria_mcd)
+                            : escalaProgramaActual.value.notaAprobatoria,
                     incluido: true,
                 });
             });
@@ -644,19 +610,28 @@ const resumenTotales = computed(() => {
 watch(
     resumenTotales,
     (tot) => {
-        form.creditos_minimos_tsu_mac = tot.creditosTsu;
-        form.horas_minimas_tsu_mac = tot.horasTsu;
-        form.materias_obligatorias_tsu_mac = tot.materiasTsu;
-        form.creditos_minimos_ing_mac = tot.creditosIng;
-        form.horas_minimas_ing_mac = tot.horasIng;
-        form.materias_obligatorias_ing_mac = tot.materiasIng;
-        form.creditos_minimos_prosecucion_mac = tot.creditosProsecucion;
+        form.total_credito_tsu_mac = tot.creditosTsu;
+        form.total_horas_tsu_mac = tot.horasTsu;
+        form.total_unidades_tsu_mac = tot.materiasTsu;
+        form.total_credito_ing_mac = tot.creditosIng;
+        form.total_horas_ing_mac = tot.horasIng;
+        form.total_unidades_ing_mac = tot.materiasIng;
+        form.total_credito_prosecucion_mac = tot.creditosProsecucion;
     },
     { immediate: true }
 );
 
 const submit = () => {
-    form.unidades_seleccionadas = unidadesPlanas.value;
+    const lista = unidadesPlanas.value;
+    const invalida = lista.find((u) => !esNotaValida(u.nota_minima_aprobatoria_mcd));
+    if (invalida) {
+        toast.error('Nota aprobatoria fuera de rango', {
+            description: `[${invalida.codigo}] tiene una nota (${invalida.nota_minima_aprobatoria_mcd}) fuera del rango ${escalaProgramaActual.value.min}–${escalaProgramaActual.value.max}.`,
+        });
+        return;
+    }
+
+    form.unidades_seleccionadas = lista;
     form.post(route('academico.malla-curricular.store'), {
         preserveScroll: true,
     });
@@ -667,7 +642,7 @@ const submit = () => {
     <Head title="Crear Malla Curricular" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="flex flex-col gap-6 p-4 md:p-6 max-w-6xl mx-auto w-full">
+        <div class="flex flex-col gap-6 px-4 pt-4 md:px-6 md:pt-6 pb-24 max-w-6xl mx-auto w-full">
             <!-- Encabezado Superior -->
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
@@ -723,23 +698,27 @@ const submit = () => {
                         <!-- Fila 1: Programa / PNF y Nombre de la Malla -->
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
                             <div class="space-y-2">
-                                <Label for="pnf_id" class="font-semibold">
+                                <Label for="prg_id" class="font-semibold">
                                     Programa / PNF <span class="text-destructive">*</span>
                                 </Label>
                                 <select
-                                    id="pnf_id"
-                                    v-model="form.pnf_id"
+                                    id="prg_id"
+                                    v-model="form.prg_id"
                                     class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                                    :class="{ 'border-destructive': form.errors.pnf_id }"
+                                    :class="{ 'border-destructive': form.errors.prg_id || (form.errors as any).pnf_id }"
                                     required
                                 >
                                     <option value="" disabled>Seleccione un Programa / PNF...</option>
-                                    <option v-for="pnf in pnfs" :key="pnf.id_pnf" :value="pnf.id_pnf">
-                                        {{ pnf.codigo_pnf ? `[${pnf.codigo_pnf}] ` : '' }}{{ pnf.nombre_pnf }}
+                                    <option
+                                        v-for="prog in listaProgramas"
+                                        :key="obtenerIdPrograma(prog)"
+                                        :value="obtenerIdPrograma(prog)"
+                                    >
+                                        {{ obtenerCodigoPrograma(prog) ? `[${obtenerCodigoPrograma(prog)}] ` : '' }}{{ obtenerNombrePrograma(prog) }}
                                     </option>
                                 </select>
-                                <p v-if="form.errors.pnf_id" class="text-xs text-destructive font-medium">
-                                    {{ form.errors.pnf_id }}
+                                <p v-if="form.errors.prg_id || (form.errors as any).pnf_id" class="text-xs text-destructive font-medium">
+                                    {{ form.errors.prg_id || (form.errors as any).pnf_id }}
                                 </p>
                             </div>
 
@@ -861,16 +840,16 @@ const submit = () => {
                                     </Label>
                                     <select
                                         id="tipo_periodo_global"
-                                        v-model="tipoPeriodoGlobalId"
+                                        v-model="tipoLapsoGlobalId"
                                         @change="aplicarTipoPeriodoGlobal"
                                         class="h-8 bg-transparent text-xs font-medium focus:outline-none pr-2"
                                     >
                                         <option
-                                            v-for="tp in tiposPeriodo"
-                                            :key="tp.id_tpd"
-                                            :value="tp.id_tpd"
+                                            v-for="tp in catalogoTiposLapso"
+                                            :key="obtenerIdTipoLapso(tp)"
+                                            :value="obtenerIdTipoLapso(tp)"
                                         >
-                                            {{ tp.nomenclatura || tp.nombre_tpd }} ({{ tp.duracion_semanas_tpd || 18 }} sem.)
+                                            {{ obtenerNomenclaturaTipoLapso(tp) || obtenerNombreTipoLapso(tp) }} ({{ obtenerDuracionTipoLapso(tp) || 18 }} sem.)
                                         </option>
                                     </select>
                                 </div>
@@ -900,9 +879,9 @@ const submit = () => {
                                     Trayecto Inicial
                                 </Button>
 
-                                <!-- Autocompletar opcional desde el catálogo del PNF -->
+                                <!-- Autocompletar opcional desde el catálogo del Programa -->
                                 <Button
-                                    v-if="form.pnf_id"
+                                    v-if="form.prg_id"
                                     type="button"
                                     variant="secondary"
                                     size="sm"
@@ -912,7 +891,7 @@ const submit = () => {
                                 >
                                     <Loader2 v-if="cargandoSugerencia" class="h-3.5 w-3.5 animate-spin" />
                                     <Sparkles v-else class="h-3.5 w-3.5 text-amber-500" />
-                                    Cargar Materias Sugeridas del PNF
+                                    Cargar Materias Sugeridas del Programa
                                 </Button>
                             </div>
                         </div>
@@ -921,7 +900,7 @@ const submit = () => {
                     <!-- ========================================================= -->
                     <!-- SECCIÓN 3: DETALLE DE UNIDADES POR TRAYECTO Y SEMESTRE    -->
                     <!-- ========================================================= -->
-                    <CardContent class="pt-6 space-y-6">
+                    <CardContent class="pt-6 space-y-6 min-w-0">
                         <!-- Banner de Confirmación Instantánea al Agregar Trayecto / Período / Unidad -->
                         <div
                             v-if="notificacionAccion"
@@ -955,7 +934,7 @@ const submit = () => {
                             v-for="trayecto in trayectos"
                             :id="trayecto.uid"
                             :key="trayecto.uid"
-                            class="rounded-xl border-2 bg-card shadow-xs overflow-hidden transition-all duration-300"
+                            class="rounded-xl border-2 bg-card shadow-xs transition-all duration-300 min-w-0"
                             :class="
                                 ultimoTrayectoUid === trayecto.uid
                                     ? 'border-emerald-500 ring-2 ring-emerald-500/30'
@@ -963,7 +942,7 @@ const submit = () => {
                             "
                         >
                             <!-- Cabecera del Trayecto -->
-                            <div class="flex flex-wrap items-center justify-between gap-3 bg-muted/40 px-4 py-3 border-b">
+                            <div class="flex flex-wrap items-center justify-between gap-3 bg-muted/40 px-4 py-3 border-b rounded-t-[10px]">
                                 <div class="flex items-center gap-3">
                                     <Badge variant="default" class="text-xs px-2.5 py-1 uppercase tracking-wider font-bold">
                                         {{ trayecto.nombre_tra }}
@@ -981,16 +960,16 @@ const submit = () => {
                                     <div class="flex items-center gap-1.5 text-xs">
                                         <span class="text-muted-foreground font-medium">División:</span>
                                         <select
-                                            :value="trayecto.tpd_id"
+                                            :value="trayecto.tla_id"
                                             @change="cambiarTipoPeriodoTrayecto(trayecto, Number(($event.target as HTMLSelectElement).value))"
                                             class="h-7 rounded border border-input bg-background px-2 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-ring"
                                         >
                                             <option
-                                                v-for="tp in tiposPeriodo"
-                                                :key="tp.id_tpd"
-                                                :value="tp.id_tpd"
+                                                v-for="tp in catalogoTiposLapso"
+                                                :key="obtenerIdTipoLapso(tp)"
+                                                :value="obtenerIdTipoLapso(tp)"
                                             >
-                                                {{ tp.nomenclatura || tp.nombre_tpd }}
+                                                {{ obtenerNomenclaturaTipoLapso(tp) || obtenerNombreTipoLapso(tp) }}
                                             </option>
                                         </select>
                                     </div>
@@ -1010,22 +989,22 @@ const submit = () => {
 
                             <!-- Contenedores de Períodos (Semestre 1 / Semestre 2) tal como en el croquis -->
                             <div
-                                class="p-4 grid gap-4"
+                                class="p-4 grid gap-4 min-w-0"
                                 :class="{
                                     'grid-cols-1': trayecto.periodos.length === 1,
-                                    'grid-cols-1 lg:grid-cols-2': trayecto.periodos.length === 2,
-                                    'grid-cols-1 lg:grid-cols-3': trayecto.periodos.length >= 3,
+                                    'grid-cols-1 xl:grid-cols-2': trayecto.periodos.length === 2,
+                                    'grid-cols-1 xl:grid-cols-3': trayecto.periodos.length >= 3,
                                 }"
                             >
                                 <div
                                     v-for="periodo in trayecto.periodos"
                                     :key="periodo.numero"
-                                    class="rounded-lg border border-border bg-background flex flex-col justify-between overflow-hidden shadow-2xs"
+                                    class="rounded-lg border border-border bg-background flex flex-col justify-between min-w-0 shadow-2xs"
                                 >
-                                    <div>
+                                    <div class="min-w-0">
                                         <!-- Encabezado del Semestre / Período + Botón [Agregar Unidad] -->
-                                        <div class="flex items-center justify-between px-3.5 py-2.5 bg-muted/25 border-b">
-                                            <div class="flex items-center gap-2">
+                                        <div class="flex flex-wrap items-center justify-between gap-2 px-3.5 py-2.5 bg-muted/25 border-b rounded-t-lg min-w-0">
+                                            <div class="flex items-center gap-2 min-w-0">
                                                 <span class="font-semibold text-sm text-foreground">
                                                     {{ periodo.etiqueta }}
                                                 </span>
@@ -1038,8 +1017,8 @@ const submit = () => {
                                                 type="button"
                                                 variant="outline"
                                                 size="sm"
-                                                class="h-7 text-xs gap-1 font-semibold border-primary/40 text-primary hover:bg-primary/10"
-                                                @click="abrirSelectorUnidad(periodo)"
+                                                class="h-7 text-xs gap-1 font-semibold border-primary/40 text-primary hover:bg-primary/10 shrink-0"
+                                                @click="abrirSelectorUnidad(trayecto, periodo)"
                                             >
                                                 <Plus class="h-3.5 w-3.5" />
                                                 Agregar Unidad
@@ -1049,69 +1028,204 @@ const submit = () => {
                                         <!-- Buscador / Selector Inline al pulsar [+ Agregar Unidad] -->
                                         <div
                                             v-if="periodo.busquedaActiva"
-                                            class="p-3 bg-primary/5 border-b border-primary/20 space-y-2.5"
+                                            :id="`selector-${trayecto.uid}-${periodo.numero}`"
+                                            class="p-3 bg-primary/5 border-b border-primary/20 space-y-2.5 min-w-0 scroll-mb-24"
                                         >
-                                            <div class="flex items-center justify-between">
-                                                <span class="text-xs font-semibold text-primary flex items-center gap-1.5">
-                                                    <Search class="h-3.5 w-3.5" />
-                                                    Seleccionar Unidad Curricular para {{ periodo.etiqueta }}
+                                            <div class="flex items-start justify-between gap-2 min-w-0">
+                                                <span class="text-xs font-semibold text-primary flex items-center gap-1.5 min-w-0 leading-snug">
+                                                    <Search class="h-3.5 w-3.5 shrink-0" />
+                                                    <span>Seleccionar Unidad Curricular para {{ periodo.etiqueta }}</span>
                                                 </span>
-                                                <button
-                                                    type="button"
-                                                    class="text-muted-foreground hover:text-foreground"
-                                                    @click="periodo.busquedaActiva = false"
-                                                >
-                                                    <X class="h-4 w-4" />
-                                                </button>
                                             </div>
 
-                                            <div class="flex flex-col sm:flex-row gap-2">
-                                                <Input
-                                                    v-model="periodo.terminoBusqueda"
-                                                    type="text"
-                                                    placeholder="Filtrar por código (ej. INF-1101) o nombre..."
-                                                    class="h-8 text-xs sm:w-52 bg-background"
-                                                />
-
-                                                <select
-                                                    v-model="periodo.uncIdSeleccionada"
-                                                    class="flex-1 h-8 rounded-md border border-input bg-background px-2.5 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
-                                                >
-                                                    <option value="" disabled>
-                                                        Seleccione una asignatura del catálogo...
-                                                    </option>
-                                                    <option
-                                                        v-for="uCat in obtenerUnidadesDisponiblesParaPeriodo(periodo)"
-                                                        :key="uCat.id_unc"
-                                                        :value="uCat.id_unc"
+                                            <div class="flex flex-col gap-3 min-w-0">
+                                                <div class="space-y-1 min-w-0">
+                                                    <label
+                                                        :for="`buscar-uc-${trayecto.uid}-${periodo.numero}`"
+                                                        class="block text-[11px] font-medium text-muted-foreground"
                                                     >
-                                                        {{ uCat.codigo_unc }} — {{ uCat.nombre_unc }} ({{ uCat.uc }} UC)
-                                                    </option>
-                                                </select>
+                                                        Unidad Curricular
+                                                    </label>
+                                                    <UnidadCurricularCombobox
+                                                        :input-id="`buscar-uc-${trayecto.uid}-${periodo.numero}`"
+                                                        v-model="periodo.uncIdSeleccionada"
+                                                        v-model:query="periodo.terminoBusqueda"
+                                                        :catalogo="props.unidadesCatalogo"
+                                                        :excluded-ids="idsUnidadesYaEnMalla"
+                                                        :semestre-global="periodo.semestreGlobal"
+                                                        :codigo-prefix="codigoProgramaPrefix"
+                                                        @select="(item) => onSeleccionarUnidadCatalogo(periodo, item)"
+                                                    />
+                                                </div>
 
-                                                <Button
-                                                    type="button"
-                                                    size="sm"
-                                                    class="h-8 px-3 text-xs gap-1 shrink-0"
-                                                    :disabled="!periodo.uncIdSeleccionada"
-                                                    @click="confirmarAgregarUnidad(trayecto, periodo)"
-                                                >
-                                                    <Check class="h-3.5 w-3.5" />
-                                                    Insertar
-                                                </Button>
+                                                <!-- Parámetros Académicos de la Unidad en esta Malla -->
+                                                <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 min-w-0">
+                                                    <div class="space-y-1 min-w-0">
+                                                        <label
+                                                            :for="`eje-${trayecto.uid}-${periodo.numero}`"
+                                                            class="block text-[11px] font-medium text-muted-foreground"
+                                                        >
+                                                            Eje
+                                                        </label>
+                                                        <select
+                                                            :id="`eje-${trayecto.uid}-${periodo.numero}`"
+                                                            v-model="periodo.ecuIdSeleccionado"
+                                                            class="h-8 w-full max-w-full min-w-0 rounded-md border border-input bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+                                                        >
+                                                            <option value="">Sin eje</option>
+                                                            <option
+                                                                v-for="eje in props.ejes"
+                                                                :key="eje.id_ecu"
+                                                                :value="eje.id_ecu"
+                                                            >
+                                                                {{ eje.nombre_ecu }}
+                                                            </option>
+                                                        </select>
+                                                    </div>
+
+                                                    <div class="space-y-1 min-w-0">
+                                                        <label
+                                                            :for="`hea-${trayecto.uid}-${periodo.numero}`"
+                                                            class="block text-[11px] font-medium text-muted-foreground"
+                                                        >
+                                                            HEA
+                                                        </label>
+                                                        <Input
+                                                            :id="`hea-${trayecto.uid}-${periodo.numero}`"
+                                                            v-model.number="periodo.hteaSeleccionado"
+                                                            type="number"
+                                                            min="0"
+                                                            step="1"
+                                                            class="h-8 w-full max-w-full min-w-0 text-xs bg-background"
+                                                            @input="recalcularHtePeriodo(periodo)"
+                                                        />
+                                                    </div>
+
+                                                    <div class="space-y-1 min-w-0">
+                                                        <label
+                                                            :for="`hei-${trayecto.uid}-${periodo.numero}`"
+                                                            class="block text-[11px] font-medium text-muted-foreground"
+                                                        >
+                                                            HEI
+                                                        </label>
+                                                        <Input
+                                                            :id="`hei-${trayecto.uid}-${periodo.numero}`"
+                                                            v-model.number="periodo.hteiSeleccionado"
+                                                            type="number"
+                                                            min="0"
+                                                            step="1"
+                                                            class="h-8 w-full max-w-full min-w-0 text-xs bg-background"
+                                                            @input="recalcularHtePeriodo(periodo)"
+                                                        />
+                                                    </div>
+
+                                                    <div class="space-y-1 min-w-0">
+                                                        <label
+                                                            :for="`hte-${trayecto.uid}-${periodo.numero}`"
+                                                            class="block text-[11px] font-medium text-muted-foreground"
+                                                        >
+                                                            HTE (HEA + HEI)
+                                                        </label>
+                                                        <Input
+                                                            :id="`hte-${trayecto.uid}-${periodo.numero}`"
+                                                            v-model.number="periodo.thteSeleccionado"
+                                                            type="number"
+                                                            min="0"
+                                                            step="1"
+                                                            class="h-8 w-full max-w-full min-w-0 text-xs font-semibold bg-background"
+                                                        />
+                                                    </div>
+
+                                                    <div class="space-y-1 min-w-0">
+                                                        <label
+                                                            :for="`duracion-${trayecto.uid}-${periodo.numero}`"
+                                                            class="block text-[11px] font-medium text-muted-foreground"
+                                                        >
+                                                            Duración
+                                                        </label>
+                                                        <select
+                                                            :id="`duracion-${trayecto.uid}-${periodo.numero}`"
+                                                            v-model.number="periodo.duracionSemestresSeleccionada"
+                                                            class="h-8 w-full max-w-full min-w-0 rounded-md border border-input bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+                                                        >
+                                                            <option :value="1">1 Semestre</option>
+                                                            <option :value="2">2 Semestres</option>
+                                                        </select>
+                                                    </div>
+
+                                                    <div class="space-y-1 min-w-0">
+                                                        <label
+                                                            :for="`na-${trayecto.uid}-${periodo.numero}`"
+                                                            class="block text-[11px] font-medium text-muted-foreground"
+                                                        >
+                                                            N.A. (Nota Aprob.)
+                                                        </label>
+                                                        <Input
+                                                            :id="`na-${trayecto.uid}-${periodo.numero}`"
+                                                            v-model="periodo.notaAprobatoriaSeleccionada"
+                                                            type="number"
+                                                            :min="escalaProgramaActual.min"
+                                                            :max="escalaProgramaActual.max"
+                                                            step="0.5"
+                                                            :aria-invalid="Boolean(mensajeErrorNotaPeriodo(periodo))"
+                                                            :class="[
+                                                                'h-8 w-full max-w-full min-w-0 text-xs bg-background',
+                                                                mensajeErrorNotaPeriodo(periodo) ? 'border-destructive focus-visible:ring-destructive/30' : '',
+                                                            ]"
+                                                        />
+                                                        <p
+                                                            v-if="mensajeErrorNotaPeriodo(periodo)"
+                                                            class="text-[10px] text-destructive leading-tight"
+                                                        >
+                                                            {{ mensajeErrorNotaPeriodo(periodo) }}
+                                                        </p>
+                                                        <p
+                                                            v-else
+                                                            class="text-[10px] text-muted-foreground leading-tight"
+                                                        >
+                                                            Escala {{ escalaProgramaActual.min }}–{{ escalaProgramaActual.max }}
+                                                        </p>
+                                                    </div>
+                                                </div>
+
+                                                <div class="flex flex-wrap items-center justify-end gap-2 pt-0.5">
+                                                    <Button
+                                                        type="button"
+                                                        variant="outline"
+                                                        size="sm"
+                                                        class="h-8 px-2.5 text-xs gap-1"
+                                                        @click="periodo.busquedaActiva = false"
+                                                    >
+                                                        <X class="h-3.5 w-3.5" />
+                                                        Cancelar
+                                                    </Button>
+                                                    <Button
+                                                        type="button"
+                                                        size="sm"
+                                                        class="h-8 px-3 text-xs gap-1 shrink-0"
+                                                        :disabled="!periodo.uncIdSeleccionada || Boolean(mensajeErrorNotaPeriodo(periodo))"
+                                                        @click="confirmarAgregarUnidad(trayecto, periodo)"
+                                                    >
+                                                        <Check class="h-3.5 w-3.5" />
+                                                        Insertar
+                                                    </Button>
+                                                </div>
                                             </div>
                                         </div>
 
-                                        <!-- Tabla de Materias del Semestre (N°, Código, Nombre de la Asignatura) -->
+                                        <!-- Tabla de Materias del Semestre (N°, Asignatura, Eje, UC, HTE (HEA/HEI), Duración, N.A.) -->
                                         <div class="overflow-x-auto">
                                             <table class="w-full text-xs">
                                                 <thead>
                                                     <tr class="border-b bg-muted/15 text-muted-foreground">
-                                                        <th class="py-2 px-3 text-left font-semibold w-10">#</th>
-                                                        <th class="py-2 px-3 text-left font-semibold w-28">Código</th>
-                                                        <th class="py-2 px-3 text-left font-semibold">Asignatura</th>
-                                                        <th class="py-2 px-2 text-center font-semibold w-16">U.C.</th>
-                                                        <th class="py-2 px-2 text-right font-semibold w-10"></th>
+                                                        <th class="py-2 px-2.5 text-left font-semibold w-8">#</th>
+                                                        <th class="py-2 px-2.5 text-left font-semibold min-w-[140px]">Asignatura</th>
+                                                        <th class="py-2 px-2 text-left font-semibold min-w-[115px]">Eje</th>
+                                                        <th class="py-2 px-1.5 text-center font-semibold w-14">U.C.</th>
+                                                        <th class="py-2 px-2 text-center font-semibold min-w-[138px]">HTE (HEA/HEI)</th>
+                                                        <th class="py-2 px-1.5 text-center font-semibold w-20">Duración</th>
+                                                        <th class="py-2 px-1.5 text-center font-semibold w-16">N.A.</th>
+                                                        <th class="py-2 px-2 text-right font-semibold w-9"></th>
                                                     </tr>
                                                 </thead>
                                                 <tbody class="divide-y">
@@ -1119,7 +1233,7 @@ const submit = () => {
                                                         v-if="periodo.unidades.length === 0"
                                                         class="text-muted-foreground"
                                                     >
-                                                        <td colspan="5" class="py-6 text-center italic">
+                                                        <td colspan="8" class="py-6 text-center italic">
                                                             Sin unidades asignadas en {{ periodo.etiqueta }}. Pulse
                                                             <strong>"+ Agregar Unidad"</strong>.
                                                         </td>
@@ -1130,22 +1244,100 @@ const submit = () => {
                                                         :key="unidad.unc_id"
                                                         class="hover:bg-muted/20 transition-colors"
                                                     >
-                                                        <td class="py-2 px-3 font-mono font-semibold text-muted-foreground">
+                                                        <td class="py-2 px-2.5 font-mono font-semibold text-muted-foreground">
                                                             {{ idx + 1 }}
                                                         </td>
-                                                        <td class="py-2 px-3 font-mono font-semibold text-primary">
-                                                            {{ unidad.codigo }}
+                                                        <td class="py-2 px-2.5">
+                                                            <div class="font-mono text-[11px] font-semibold text-primary">
+                                                                {{ unidad.codigo }}
+                                                            </div>
+                                                            <div class="font-medium text-foreground leading-snug">
+                                                                {{ unidad.nombre }}
+                                                            </div>
                                                         </td>
-                                                        <td class="py-2 px-3 font-medium text-foreground">
-                                                            {{ unidad.nombre }}
+                                                        <td class="py-1.5 px-2">
+                                                            <select
+                                                                v-model="unidad.ecu_id"
+                                                                aria-label="Eje curricular de la unidad"
+                                                                class="h-7 w-full min-w-[110px] rounded border border-input bg-background px-1.5 text-[11px] focus:outline-none focus:ring-1 focus:ring-ring"
+                                                            >
+                                                                <option :value="null">Sin eje</option>
+                                                                <option
+                                                                    v-for="eje in props.ejes"
+                                                                    :key="eje.id_ecu"
+                                                                    :value="eje.id_ecu"
+                                                                >
+                                                                    {{ eje.nombre_ecu }}
+                                                                </option>
+                                                            </select>
                                                         </td>
-                                                        <td class="py-1.5 px-2 text-center">
+                                                        <td class="py-1.5 px-1.5 text-center">
                                                             <input
                                                                 v-model.number="unidad.uc"
                                                                 type="number"
                                                                 min="0"
                                                                 max="20"
-                                                                class="w-12 h-6 text-center rounded border border-input bg-background text-xs font-medium"
+                                                                aria-label="Unidades de crédito"
+                                                                class="w-11 h-7 text-center rounded border border-input bg-background text-xs font-medium"
+                                                            />
+                                                        </td>
+                                                        <td class="py-1.5 px-2">
+                                                            <div class="flex items-center justify-center gap-1">
+                                                                <input
+                                                                    v-model.number="unidad.htea"
+                                                                    type="number"
+                                                                    min="0"
+                                                                    title="HEA"
+                                                                    aria-label="Horas de estudio acompañado"
+                                                                    class="w-10 h-7 text-center rounded border border-input bg-background text-[11px]"
+                                                                    @input="recalcularHteUnidad(unidad)"
+                                                                />
+                                                                <span class="text-muted-foreground text-[10px]">+</span>
+                                                                <input
+                                                                    v-model.number="unidad.htei"
+                                                                    type="number"
+                                                                    min="0"
+                                                                    title="HEI"
+                                                                    aria-label="Horas de estudio independiente"
+                                                                    class="w-10 h-7 text-center rounded border border-input bg-background text-[11px]"
+                                                                    @input="recalcularHteUnidad(unidad)"
+                                                                />
+                                                                <span class="text-muted-foreground text-[10px]">=</span>
+                                                                <input
+                                                                    v-model.number="unidad.thte"
+                                                                    type="number"
+                                                                    min="0"
+                                                                    title="HTE total"
+                                                                    aria-label="Horas totales del estudiante"
+                                                                    class="w-10 h-7 text-center rounded border border-primary/40 bg-primary/5 text-[11px] font-bold text-primary"
+                                                                />
+                                                            </div>
+                                                        </td>
+                                                        <td class="py-1.5 px-1.5 text-center">
+                                                            <select
+                                                                v-model.number="unidad.duracion_semestres"
+                                                                aria-label="Duración en semestres"
+                                                                class="h-7 rounded border border-input bg-background px-1.5 text-[11px] font-medium focus:outline-none focus:ring-1 focus:ring-ring"
+                                                                @change="onCambiarDuracionFila(trayecto, unidad)"
+                                                            >
+                                                                <option :value="1">1 Sem</option>
+                                                                <option :value="2">2 Sem</option>
+                                                            </select>
+                                                        </td>
+                                                        <td class="py-1.5 px-1.5 text-center">
+                                                            <input
+                                                                v-model.number="unidad.nota_minima_aprobatoria_mcd"
+                                                                type="number"
+                                                                :min="escalaProgramaActual.min"
+                                                                :max="escalaProgramaActual.max"
+                                                                step="0.5"
+                                                                aria-label="Nota aprobatoria"
+                                                                :class="[
+                                                                    'w-13 h-7 text-center rounded border bg-background text-xs font-medium',
+                                                                    !esNotaValida(unidad.nota_minima_aprobatoria_mcd)
+                                                                        ? 'border-destructive text-destructive'
+                                                                        : 'border-input',
+                                                                ]"
                                                             />
                                                         </td>
                                                         <td class="py-1.5 px-2 text-right">
@@ -1199,15 +1391,15 @@ const submit = () => {
                             <div class="grid grid-cols-3 gap-3">
                                 <div>
                                     <Label class="text-xs">Créditos TSU</Label>
-                                    <Input v-model="form.creditos_minimos_tsu_mac" type="number" min="0" class="h-8 text-xs mt-1" />
+                                    <Input v-model="form.total_credito_tsu_mac" type="number" min="0" class="h-8 text-xs mt-1" />
                                 </div>
                                 <div>
                                     <Label class="text-xs">Horas TSU</Label>
-                                    <Input v-model="form.horas_minimas_tsu_mac" type="number" min="0" class="h-8 text-xs mt-1" />
+                                    <Input v-model="form.total_horas_tsu_mac" type="number" min="0" class="h-8 text-xs mt-1" />
                                 </div>
                                 <div>
                                     <Label class="text-xs">Materias TSU</Label>
-                                    <Input v-model="form.materias_obligatorias_tsu_mac" type="number" min="0" class="h-8 text-xs mt-1" />
+                                    <Input v-model="form.total_unidades_tsu_mac" type="number" min="0" class="h-8 text-xs mt-1" />
                                 </div>
                             </div>
                         </div>
@@ -1219,29 +1411,25 @@ const submit = () => {
                             <div class="grid grid-cols-3 gap-3">
                                 <div>
                                     <Label class="text-xs">Créditos Ing.</Label>
-                                    <Input v-model="form.creditos_minimos_ing_mac" type="number" min="0" class="h-8 text-xs mt-1" />
+                                    <Input v-model="form.total_credito_ing_mac" type="number" min="0" class="h-8 text-xs mt-1" />
                                 </div>
                                 <div>
                                     <Label class="text-xs">Horas Ing.</Label>
-                                    <Input v-model="form.horas_minimas_ing_mac" type="number" min="0" class="h-8 text-xs mt-1" />
+                                    <Input v-model="form.total_horas_ing_mac" type="number" min="0" class="h-8 text-xs mt-1" />
                                 </div>
                                 <div>
                                     <Label class="text-xs">Materias Ing.</Label>
-                                    <Input v-model="form.materias_obligatorias_ing_mac" type="number" min="0" class="h-8 text-xs mt-1" />
+                                    <Input v-model="form.total_unidades_ing_mac" type="number" min="0" class="h-8 text-xs mt-1" />
                                 </div>
                             </div>
                         </div>
                     </CardContent>
 
-                    <CardFooter class="flex items-center justify-end gap-3 border-t bg-muted/20 px-6 py-4">
-                        <Button variant="outline" type="button" as-child :disabled="form.processing">
-                            <Link :href="route('academico.malla-curricular.index')">Cancelar</Link>
-                        </Button>
-
-                        <Button type="submit" :disabled="form.processing" class="gap-2">
-                            <Save class="h-4 w-4" />
-                            {{ form.processing ? 'Guardando Malla...' : 'Guardar Malla Curricular' }}
-                        </Button>
+                    <CardFooter class="border-t border-slate-100 bg-muted/20 px-6 py-4 dark:border-slate-800/60">
+                        <CrudFormFooter
+                            :cancel-href="route('academico.malla-curricular.index')"
+                            :processing="form.processing"
+                        />
                     </CardFooter>
                 </Card>
             </form>

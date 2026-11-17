@@ -4,29 +4,30 @@
  *
  * Propósito: Página para consultar, buscar, filtrar y gestionar las escalas de calificación
  * registradas en el SOGAC siguiendo el diseño estándar de PNF / Trayecto / Sede.
+ *
+ * Historial:
+ * - 2026-11-16: Estandarización global con <CrudActionButtons /> y botón superior "Nueva Escala de Medición".
  */
-import { ref, watch, computed } from 'vue';
 import { Head, Link, router } from '@inertiajs/vue3';
+import { Calculator, Plus, X } from 'lucide-vue-next';
+import { computed, ref, watch } from 'vue';
 import { route } from 'ziggy-js';
-import AppLayout from '@/layouts/AppLayout.vue';
 import { Button } from '@/components/ui/button';
-import SuccessAlert from '@/components/ui/SuccessAlert.vue';
-import DataTable from '@/components/ui/DataTable.vue';
+import CrudActionButtons from '@/components/ui/CrudActionButtons.vue';
 import DataPagination from '@/components/ui/DataPagination.vue';
-import TableSkeleton from '@/components/ui/TableSkeleton.vue';
+import DataTable from '@/components/ui/DataTable.vue';
 import SearchFilter from '@/components/ui/filters/SearchFilter.vue';
 import TabFilter from '@/components/ui/filters/TabFilter.vue';
+import StatusSwitch from '@/components/ui/StatusSwitch.vue';
+import SuccessAlert from '@/components/ui/SuccessAlert.vue';
+import TableSkeleton from '@/components/ui/TableSkeleton.vue';
+import { useConfirmDialog } from '@/composables/useConfirmDialog';
 import { useDataFetching } from '@/composables/useDataFetching';
 import { useFlashAlert } from '@/composables/useFlashAlert';
+import AppLayout from '@/layouts/AppLayout.vue';
+import { esActivo } from '@/lib/status';
 import type { Column } from '@/types/dataTable';
 import type { BreadcrumbItem } from '@/types/navigation';
-import {
-    Calculator,
-    Plus,
-    Pencil,
-    Trash2,
-    X,
-} from 'lucide-vue-next';
 
 interface EscalaItem {
     id_esm: number;
@@ -35,7 +36,7 @@ interface EscalaItem {
     nota_minima_esm: number | null;
     nota_maxima_esm: number | null;
     status_id?: number;
-    status: boolean;
+    status?: boolean;
     created_at?: string;
     updated_at?: string;
 }
@@ -66,6 +67,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 ];
 
 const { showSuccessAlert, message, closeAlert } = useFlashAlert();
+const { confirmDialog } = useConfirmDialog();
 
 const columns: Column[] = [
     { key: 'id_esm', label: 'ID', align: 'center', width: 'w-20' },
@@ -111,10 +113,12 @@ watch(
     { deep: true, immediate: true }
 );
 
-const eliminarRegistro = (ruta: string) => { 
-    if (confirm('⚠️ ADVERTENCIA: ¿Estás seguro de que deseas eliminar este registro? Desaparecerá de la lista.')) { 
-        router.delete(ruta); 
-    } 
+const toggleEstatus = async (row: EscalaItem) => {
+    const activo = esActivo(row);
+    const accion = activo ? 'desactivar' : 'activar';
+    if (await confirmDialog(`¿Está seguro de que desea ${accion} la escala de medición "${row.nombre_esm}"?`)) {
+        router.patch(route('academico.escala-medicion.toggle_status', row.id_esm), {}, { preserveScroll: true });
+    }
 };
 </script>
 
@@ -147,10 +151,10 @@ const eliminarRegistro = (ruta: string) => {
                 </div>
 
                 <div class="flex items-center gap-2">
-                    <Button as-child size="default" class="shadow-sm">
+                    <Button as-child size="default" class="gap-2 shadow-sm">
                         <Link :href="route('academico.escala-medicion.create')">
-                            <Plus class="h-4 w-4 mr-2" />
-                            Registrar Escala
+                            <Plus class="h-4 w-4" />
+                            Nueva Escala de Medición
                         </Link>
                     </Button>
                 </div>
@@ -240,38 +244,22 @@ const eliminarRegistro = (ruta: string) => {
                     </template>
 
                     <!-- SLOT: ESTATUS -->
-                    <template #status="{ row }">
-                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-400">
-                            Activo
-                        </span>
+                    <template #status="{ row, item }">
+                        <StatusSwitch
+                            :status="esActivo(row || item)"
+                            @toggle="toggleEstatus(row || item)"
+                        />
                     </template>
 
-                    <!-- SLOT: ACCIONES DIRECTAS STANDALONE -->
+                    <!-- SLOT: ACCIONES ESTÁNDAR -->
                     <template #actions="{ row, item }">
-                        <div class="flex items-center justify-center gap-1.5">
-                            <!-- Editar -->
-                            <Button
-                                as-child
-                                variant="ghost"
-                                size="icon"
-                                class="h-8 w-8 text-amber-600 hover:text-amber-700 dark:text-amber-400"
-                                title="Editar datos"
-                            >
-                                <Link :href="route('academico.escala-medicion.edit', (row || item).id_esm)">
-                                    <Pencil class="h-4 w-4" />
-                                </Link>
-                            </Button>
-
-                            <!-- Eliminar (Baja Lógica) -->
-                            <button
-                                type="button"
-                                class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-red-100 text-red-600 hover:bg-red-200 dark:bg-red-950/50 dark:text-red-400 dark:hover:bg-red-900/50 transition-colors"
-                                title="Eliminar escala de medición"
-                                @click="eliminarRegistro(route('academico.escala-medicion.destroy', (row || item).id_esm))"
-                            >
-                                <Trash2 class="h-4 w-4" />
-                            </button>
-                        </div>
+                        <CrudActionButtons
+                            show-route="academico.escala-medicion.show"
+                            edit-route="academico.escala-medicion.edit"
+                            delete-route="academico.escala-medicion.destroy"
+                            :record-id="(row || item).id_esm"
+                            :record-name="(row || item).nombre_esm"
+                        />
                     </template>
                 </DataTable>
             </div>

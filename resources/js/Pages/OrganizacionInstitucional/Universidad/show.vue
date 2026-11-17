@@ -11,6 +11,7 @@
  * - [Ajuste de Campos]: Eliminación de visualización de inicio de actividades y cese de operaciones.
  * - [Eliminación de Botón Redundante]: Se removió el botón "Desactivar Institución" para centralizar el control de estatus exclusivamente en el componente `<StatusSwitch>`.
  * - [Estandarización de Título]: Se simplificó el título principal de la vista a 'Universidad' por directiva del usuario, manteniendo la denominación completa institucional en el bloque de datos generales.
+ * - [Actualización sogac_mio]: Uso de `url_pagina_uni`, `status_id` (`@/lib/status`) y `users.username`.
  */
 import { Head, Link, router } from '@inertiajs/vue3';
 import { route } from 'ziggy-js';
@@ -21,6 +22,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import type { BreadcrumbItem } from '@/types/navigation';
 import { useConfirmDialog } from '@/composables/useConfirmDialog';
 import { useTableExport } from '@/composables/useTableExport';
+import { esActivo } from '@/lib/status';
 import {
     GraduationCap,
     ArrowLeft,
@@ -61,7 +63,8 @@ interface LocalidadRelacion {
 
 interface UserRelacion {
     id: number;
-    name: string;
+    username: string;
+    name?: string;
     email: string;
 }
 
@@ -72,15 +75,17 @@ interface UniversidadModel {
     codigo_ministerio_uni?: string | null;
     rif_uni?: string | null;
     telefono_uni?: string | null;
+    fax_uni?: string | null;
     correo_uni?: string | null;
-    sitio_web_uni?: string | null;
+    url_pagina_uni?: string | null;
     gaceta_uni?: string | null;
     fecha_gaceta_uni?: string | null;
     decreto_uni?: string | null;
     fecha_decreto_uni?: string | null;
     fecha_inicio_uni?: string | null;
     fecha_fin_uni?: string | null;
-    status: boolean;
+    status_id?: number;
+    status?: boolean | number;
     localidad?: LocalidadRelacion | null;
     creador?: UserRelacion | null;
     actualizador?: UserRelacion | null;
@@ -121,7 +126,7 @@ const formatDateTime = (isoString?: string | null) => {
 };
 
 const toggleEstatus = async () => {
-    const accion = props.universidad.status ? 'desactivar' : 'activar';
+    const accion = esActivo(props.universidad) ? 'desactivar' : 'activar';
     if (await confirmDialog(`¿Está seguro de que desea ${accion} la universidad "${props.universidad.nombre_uni}"?`)) {
         router.patch(route('organizacion.universidad.status', props.universidad.id_uni), {}, {
             preserveScroll: true,
@@ -152,7 +157,7 @@ const imprimirFicha = () => {
                         <h1 class="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
                             Universidad
                         </h1>
-                        <StatusSwitch class="print:hidden" :status="props.universidad.status" @toggle="toggleEstatus" />
+                        <StatusSwitch class="print:hidden" :status="esActivo(props.universidad)" @toggle="toggleEstatus" />
                     </div>
                     <p class="text-sm text-muted-foreground ml-10 print:ml-0">
                         Ficha integral de la institución rectora y datos del decreto fundacional.
@@ -329,13 +334,13 @@ const imprimirFicha = () => {
                                     <div class="font-medium text-muted-foreground text-xs">Sitio Web Oficial</div>
                                     <div>
                                         <a
-                                            v-if="props.universidad.sitio_web_uni"
-                                            :href="props.universidad.sitio_web_uni"
+                                            v-if="props.universidad.url_pagina_uni"
+                                            :href="props.universidad.url_pagina_uni"
                                             target="_blank"
                                             rel="noopener noreferrer"
                                             class="text-primary hover:underline flex items-center gap-1"
                                         >
-                                            <span class="truncate">{{ props.universidad.sitio_web_uni }}</span>
+                                            <span class="truncate">{{ props.universidad.url_pagina_uni }}</span>
                                             <ExternalLink class="h-3 w-3 shrink-0" />
                                         </a>
                                         <span v-else class="text-muted-foreground italic">No registrado</span>
@@ -369,7 +374,7 @@ const imprimirFicha = () => {
                                 <span class="font-medium text-muted-foreground block">Registrado por:</span>
                                 <span class="text-slate-800 dark:text-slate-200 flex items-center gap-1 mt-0.5">
                                     <UserIcon class="h-3.5 w-3.5 text-muted-foreground" />
-                                    {{ props.universidad.creador.name }} ({{ props.universidad.creador.email }})
+                                    {{ props.universidad.creador.username ?? props.universidad.creador.name }} ({{ props.universidad.creador.email }})
                                 </span>
                             </div>
                             <div v-if="props.universidad.updated_at">
@@ -382,7 +387,7 @@ const imprimirFicha = () => {
                                 <span class="font-medium text-muted-foreground block">Actualizado por:</span>
                                 <span class="text-slate-800 dark:text-slate-200 flex items-center gap-1 mt-0.5">
                                     <UserIcon class="h-3.5 w-3.5 text-muted-foreground" />
-                                    {{ props.universidad.actualizador.name }}
+                                    {{ props.universidad.actualizador.username ?? props.universidad.actualizador.name }}
                                 </span>
                             </div>
                         </CardContent>

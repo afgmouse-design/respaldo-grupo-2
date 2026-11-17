@@ -15,96 +15,69 @@ use Illuminate\Support\Facades\DB;
  *
  * Propósito: Población inicial y jerárquica de la estructura político-territorial
  * con datos reales de Venezuela, Estado Portuguesa (Municipios Páez y Araure),
- * sus respectivas parroquias y localidades representativas.
+ * sus respectivas parroquias y localidades representativas sobre `status_id = 1`.
  *
- * Cumplimiento técnico:
- *  - Uso de modelos Eloquent oficiales.
- *  - Control de idempotencia y prevención de duplicados con firstOrCreate().
- *  - Preservación de claves primarias y foráneas (id_pai, id_esd, id_mun, id_par, id_loc).
- *  - Estatus lógico por defecto activo (status = true).
+ * Historial:
+ *  - 2026-11-14: Reemplazado `status => true` por `status_id => 1` e incluido `iso_esd = 'VE-P'`
+ *    conforme a `sogac_mio.sql`.
  */
 class GeografiaSeeder extends Seeder
 {
-    /**
-     * Ejecuta la inserción de datos geográficos.
-     */
     public function run(): void
     {
-        DB::transaction(function () {
-            // ==========================================
-            // 1. NIVEL PAÍS
-            // ==========================================
-            $pais = Pais::firstOrCreate(
+        DB::transaction(function (): void {
+            $pais = Pais::withTrashed()->updateOrCreate(
                 ['nombre_pai' => 'Venezuela'],
-                ['status' => true]
+                ['status_id' => 1, 'deleted_at' => null]
             );
 
-            // ==========================================
-            // 2. NIVEL ESTADO
-            // ==========================================
-            $estadoPortuguesa = Estado::firstOrCreate(
+            $estadoPortuguesa = Estado::withTrashed()->updateOrCreate(
                 [
                     'pai_id'     => $pais->id_pai,
                     'nombre_esd' => 'Portuguesa',
                 ],
-                ['status' => true]
+                [
+                    'iso_esd'    => 'VE-P',
+                    'status_id'  => 1,
+                    'deleted_at' => null,
+                ]
             );
 
-            // Estructura jerárquica de Municipios, Parroquias y Localidades
             $geografiaData = [
-                // ------------------------------------------
-                // MUNICIPIO PÁEZ
-                // ------------------------------------------
                 [
-                    'municipio' => 'Páez',
+                    'municipio'  => 'Páez',
                     'parroquias' => [
                         [
-                            'parroquia' => 'Acarigua',
+                            'parroquia'   => 'Acarigua',
                             'localidades' => [
                                 'Casco Central',
                                 'Barrio Bella Vista',
                                 'Urbanización Los Cortijos',
                                 'Sector Goajira',
-                                'Reja de Guanare',
-                                'Urbanización 24 de Julio',
-                                'Zona Industrial de Acarigua',
+                                'Reja De Guanare',
+                                'Urbanización Veinticuatro De Julio',
+                                'Zona Industrial De Acarigua',
                             ],
                         ],
                         [
-                            'parroquia' => 'Payara',
-                            'localidades' => [
-                                'Payara Centro',
-                                'Caserío San José',
-                                'Sector Las Matas',
-                            ],
+                            'parroquia'   => 'Payara',
+                            'localidades' => ['Payara Centro', 'Caserío San José', 'Sector Las Matas'],
                         ],
                         [
-                            'parroquia' => 'Pimpinela',
-                            'localidades' => [
-                                'Pimpinela Centro',
-                                'Caserío Las Majaguas',
-                                'Sector El Mamón',
-                            ],
+                            'parroquia'   => 'Pimpinela',
+                            'localidades' => ['Pimpinela Centro', 'Caserío Las Majaguas', 'Sector El Mamón'],
                         ],
                         [
-                            'parroquia' => 'Ramón Peraza',
-                            'localidades' => [
-                                'Mijagüito',
-                                'Sector Sabanetica',
-                                'Caserío La Tapa',
-                            ],
+                            'parroquia'   => 'Ramón Peraza',
+                            'localidades' => ['Mijagüito', 'Sector Sabanetica', 'Caserío La Tapa'],
                         ],
                     ],
                 ],
-
-                // ------------------------------------------
-                // MUNICIPIO ARAURE
-                // ------------------------------------------
                 [
-                    'municipio' => 'Araure',
+                    'municipio'  => 'Araure',
                     'parroquias' => [
                         [
-                            'parroquia' => 'Araure',
+                            'parroquia'   => 'Araure',
                             'localidades' => [
                                 'Casco Colonial de Araure',
                                 'Urbanización Villa Araure',
@@ -116,55 +89,46 @@ class GeografiaSeeder extends Seeder
                             ],
                         ],
                         [
-                            'parroquia' => 'Río Acarigua',
-                            'localidades' => [
-                                'Río Acarigua Centro',
-                                'Caserío Guache',
-                                'Sector El Cambur',
-                            ],
+                            'parroquia'   => 'Río Acarigua',
+                            'localidades' => ['Río Acarigua Centro', 'Caserío Guache', 'Sector El Cambur'],
                         ],
                     ],
                 ],
             ];
 
-            // ==========================================
-            // 3. PROCESAMIENTO JERÁRQUICO
-            // ==========================================
             foreach ($geografiaData as $munData) {
-                // 3.1 MUNICIPIO
-                $municipio = Municipio::firstOrCreate(
+                $municipio = Municipio::withTrashed()->updateOrCreate(
                     [
                         'esd_id'     => $estadoPortuguesa->id_esd,
                         'nombre_mun' => $munData['municipio'],
                     ],
-                    ['status' => true]
+                    ['status_id' => 1, 'deleted_at' => null]
                 );
 
                 foreach ($munData['parroquias'] as $parrData) {
-                    // 3.2 PARROQUIA
-                    $parroquia = Parroquia::firstOrCreate(
+                    $parroquia = Parroquia::withTrashed()->updateOrCreate(
                         [
                             'mun_id'     => $municipio->id_mun,
                             'nombre_par' => $parrData['parroquia'],
                         ],
-                        ['status' => true]
+                        ['status_id' => 1, 'deleted_at' => null]
                     );
 
                     foreach ($parrData['localidades'] as $nombreLocalidad) {
-                        // 3.3 LOCALIDAD
-                        Localidad::firstOrCreate(
+                        $nombreNormalizado = (new Localidad(['nombre_loc' => $nombreLocalidad]))->nombre_loc;
+
+                        Localidad::withTrashed()->updateOrCreate(
                             [
                                 'par_id'     => $parroquia->id_par,
-                                'nombre_loc' => $nombreLocalidad,
+                                'nombre_loc' => $nombreNormalizado,
                             ],
-                            ['status' => true]
+                            ['status_id' => 1, 'deleted_at' => null]
                         );
                     }
                 }
             }
         });
 
-        $this->command?->info('✓ Módulo de Estructura Geográfica poblado exitosamente (Venezuela -> Portuguesa -> Páez/Araure).');
+        $this->command?->info('✓ Estructura Geográfica poblada (Venezuela -> Portuguesa -> Páez/Araure).');
     }
 }
-

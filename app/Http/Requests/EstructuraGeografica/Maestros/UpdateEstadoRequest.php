@@ -31,6 +31,12 @@ class UpdateEstadoRequest extends FormRequest
                 'nombre_esd' => mb_convert_case(trim(preg_replace('/[0-9]/', '', (string) $this->nombre_esd)), MB_CASE_TITLE, "UTF-8"),
             ]);
         }
+
+        if ($this->filled('iso_esd')) {
+            $this->merge([
+                'iso_esd' => mb_strtoupper(trim((string) $this->iso_esd), 'UTF-8'),
+            ]);
+        }
     }
 
     /**
@@ -49,7 +55,7 @@ class UpdateEstadoRequest extends FormRequest
             'pai_id' => [
                 'required',
                 'integer',
-                'exists:pais,id_pai',
+                Rule::exists('pais', 'id_pai')->whereNull('deleted_at'),
             ],
             'nombre_esd' => [
                 'required',
@@ -59,13 +65,20 @@ class UpdateEstadoRequest extends FormRequest
                 'regex:/^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s\-\']+$/',
                 Rule::unique('estado', 'nombre_esd')
                     ->where(function ($query) {
-                        return $query->where('pai_id', $this->input('pai_id'));
+                        return $query->where('pai_id', $this->input('pai_id'))
+                            ->whereNull('deleted_at');
                     })
                     ->ignore($estadoId, 'id_esd'),
             ],
-            'status' => [
+            'iso_esd' => [
+                'nullable',
+                'string',
+                'max:10',
+            ],
+            'status_id' => [
                 'sometimes',
-                'boolean',
+                'integer',
+                'exists:status,id_sta',
             ],
         ];
     }
@@ -87,7 +100,9 @@ class UpdateEstadoRequest extends FormRequest
             'nombre_esd.max'      => 'El nombre del estado no puede exceder los 255 caracteres.',
             'nombre_esd.regex'    => 'El nombre del estado solo debe contener letras, espacios, guiones o apóstrofes (sin números).',
             'nombre_esd.unique'   => 'Ya existe otro estado registrado con este nombre en el país seleccionado.',
-            'status.boolean'      => 'El estado debe ser verdadero o falso.',
+            'iso_esd.max'         => 'El código ISO del estado no puede exceder los 10 caracteres.',
+            'status_id.integer'   => 'El estatus seleccionado debe ser un identificador entero válido.',
+            'status_id.exists'    => 'El estatus seleccionado no existe en el catálogo del sistema.',
         ];
     }
 }

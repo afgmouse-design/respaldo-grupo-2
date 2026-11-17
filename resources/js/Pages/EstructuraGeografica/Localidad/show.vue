@@ -7,6 +7,7 @@
  *
  * Historial de Modificaciones:
  * - [Actualización]: Integración del componente `<StatusSwitch>` en el encabezado de la localidad.
+ * - [Actualización sogac_mio]: Sustitución de lecturas booleanas `status` por `status_id` mediante `@/lib/status`.
  */
 import { Head, Link, router } from '@inertiajs/vue3';
 import { route } from 'ziggy-js';
@@ -15,6 +16,7 @@ import { Button } from '@/components/ui/button';
 import StatusSwitch from '@/components/ui/StatusSwitch.vue';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { useConfirmDialog } from '@/composables/useConfirmDialog';
+import { esActivo } from '@/lib/status';
 import type { BreadcrumbItem } from '@/types/navigation';
 import {
     Home,
@@ -57,7 +59,8 @@ interface LocalidadModel {
     id_loc: number;
     nombre_loc: string;
     par_id: number;
-    status: boolean;
+    status_id?: number;
+    status?: boolean | number;
     created_at?: string;
     updated_at?: string;
     parroquia?: ParroquiaRef;
@@ -88,9 +91,9 @@ const formatDate = (isoString?: string) => {
 };
 
 const toggleEstatus = async () => {
-    const accion = props.localidad.status ? 'desactivar' : 'activar';
+    const accion = esActivo(props.localidad) ? 'desactivar' : 'activar';
     if (await confirmDialog(`¿Está seguro de que desea ${accion} la localidad "${props.localidad.nombre_loc}"?`)) {
-        router.delete(route('geografia.localidad.destroy', props.localidad.id_loc));
+        router.patch(route('geografia.localidad.status', props.localidad.id_loc), {}, { preserveScroll: true });
     }
 };
 </script>
@@ -111,7 +114,7 @@ const toggleEstatus = async () => {
                         </Button>
                         <h1 class="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100 flex items-center gap-3">
                             <span>{{ props.localidad.nombre_loc }}</span>
-                            <StatusSwitch :status="props.localidad.status" @toggle="toggleEstatus" />
+                            <StatusSwitch :status="esActivo(props.localidad)" @toggle="toggleEstatus" />
                         </h1>
                     </div>
                     <p class="text-sm text-muted-foreground ml-10 flex items-center gap-2 flex-wrap">
@@ -137,11 +140,11 @@ const toggleEstatus = async () => {
                     <Button
                         variant="outline"
                         size="sm"
-                        :class="props.localidad.status ? 'text-red-600 hover:text-red-700' : 'text-emerald-600 hover:text-emerald-700'"
+                        :class="esActivo(props.localidad) ? 'text-red-600 hover:text-red-700' : 'text-emerald-600 hover:text-emerald-700'"
                         @click="toggleEstatus"
                     >
                         <Power class="h-4 w-4 mr-2" />
-                        {{ props.localidad.status ? 'Desactivar' : 'Activar' }}
+                        {{ esActivo(props.localidad) ? 'Desactivar' : 'Activar' }}
                     </Button>
                 </div>
             </div>

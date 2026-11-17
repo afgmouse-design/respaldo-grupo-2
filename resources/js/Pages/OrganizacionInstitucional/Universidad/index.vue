@@ -9,39 +9,42 @@
  * Actualización (Interruptor de Estado - StatusSwitch):
  * Se incorporó el suiche interactivo en la columna de Estatus para activar y desactivar
  * instituciones universitarias con confirmación modal.
+ * Actualización (Alineación sogac_mio):
+ * Se adopta `status_id` mediante `@/lib/status`.
+ * Actualización (2026-11-16 - Baja Lógica en Interfaz):
+ * Se desacopla el botón de eliminar (ícono Trash2) de la inactivación, realizando
+ * soft-delete en interfaz y conservando el registro histórico en PostgreSQL.
+ * - 2026-11-16: Estandarización global con <CrudActionButtons />, botón "Nueva Universidad" y columna "Acciones".
  */
-import { ref, watch, computed } from 'vue';
 import { Head, Link, router } from '@inertiajs/vue3';
-import { route } from 'ziggy-js';
-import AppLayout from '@/layouts/AppLayout.vue';
-import { Button } from '@/components/ui/button';
-import Badge from '@/components/ui/badge/Badge.vue';
-import StatusSwitch from '@/components/ui/StatusSwitch.vue';
-import SuccessAlert from '@/components/ui/SuccessAlert.vue';
-import DataTable from '@/components/ui/DataTable.vue';
-import DataPagination from '@/components/ui/DataPagination.vue';
-import TableSkeleton from '@/components/ui/TableSkeleton.vue';
-import SearchFilter from '@/components/ui/filters/SearchFilter.vue';
-import TabFilter from '@/components/ui/filters/TabFilter.vue';
-import { useDataFetching } from '@/composables/useDataFetching';
-import { useFlashAlert } from '@/composables/useFlashAlert';
-import { useConfirmDialog } from '@/composables/useConfirmDialog';
-import { useTableExport } from '@/composables/useTableExport';
-import type { Column } from '@/types/dataTable';
-import type { BreadcrumbItem } from '@/types/navigation';
 import {
-    Building2,
-    Plus,
-    Eye,
-    Pencil,
-    Power,
-    Printer,
     FileSpreadsheet,
     FileText,
-    X,
-    MapPin,
     GraduationCap,
+    MapPin,
+    Plus,
+    Printer,
+    X,
 } from 'lucide-vue-next';
+import { computed, ref, watch } from 'vue';
+import { route } from 'ziggy-js';
+import { Button } from '@/components/ui/button';
+import CrudActionButtons from '@/components/ui/CrudActionButtons.vue';
+import DataPagination from '@/components/ui/DataPagination.vue';
+import DataTable from '@/components/ui/DataTable.vue';
+import SearchFilter from '@/components/ui/filters/SearchFilter.vue';
+import TabFilter from '@/components/ui/filters/TabFilter.vue';
+import StatusSwitch from '@/components/ui/StatusSwitch.vue';
+import SuccessAlert from '@/components/ui/SuccessAlert.vue';
+import TableSkeleton from '@/components/ui/TableSkeleton.vue';
+import { useConfirmDialog } from '@/composables/useConfirmDialog';
+import { useDataFetching } from '@/composables/useDataFetching';
+import { useFlashAlert } from '@/composables/useFlashAlert';
+import { useTableExport } from '@/composables/useTableExport';
+import AppLayout from '@/layouts/AppLayout.vue';
+import { esActivo, resolverStatusId } from '@/lib/status';
+import type { Column } from '@/types/dataTable';
+import type { BreadcrumbItem } from '@/types/navigation';
 
 interface LocalidadRelacion {
     id_loc: number;
@@ -66,7 +69,8 @@ interface UniversidadItem {
     siglas_uni?: string | null;
     rif_uni?: string | null;
     codigo_ministerio_uni?: string | null;
-    status: boolean;
+    status_id?: number;
+    status?: boolean | number;
     est_uni?: boolean;
     localidad?: LocalidadRelacion | null;
     created_at?: string;
@@ -108,7 +112,7 @@ const columns: Column[] = [
     { key: 'rif_uni', label: 'RIF', align: 'center', width: 'w-36' },
     { key: 'localidad', label: 'Sede Rectoral (Ubicación)', align: 'left', width: 'w-64' },
     { key: 'status', label: 'Estatus', align: 'center', width: 'w-40' },
-    { key: 'actions', label: 'Acciones Directas', align: 'center', width: 'w-48' },
+    { key: 'actions', label: 'Acciones', align: 'center', width: 'w-36' },
 ];
 
 const {
@@ -145,10 +149,7 @@ watch(
     { deep: true, immediate: true }
 );
 
-const isActivo = (row: any) => {
-    const val = row?.status ?? row?.est_uni;
-    return val === true || val === 1 || val === '1' || val === 'true';
-};
+const isActivo = (row: unknown) => esActivo(row);
 
 const toggleEstatus = async (row: UniversidadItem) => {
     const activo = isActivo(row);
@@ -210,10 +211,10 @@ const handlePrint = () => {
                 </div>
 
                 <div class="flex items-center gap-2">
-                    <Button as-child size="default" class="shadow-sm">
+                    <Button as-child size="default" class="gap-2 shadow-sm">
                         <Link :href="route('organizacion.universidad.create')">
-                            <Plus class="h-4 w-4 mr-2" />
-                            Registrar Universidad
+                            <Plus class="h-4 w-4" />
+                            Nueva Universidad
                         </Link>
                     </Button>
                 </div>
@@ -347,44 +348,25 @@ const handlePrint = () => {
                         </span>
                     </template>
 
-                    <!-- SLOT: ESTATUS (Interruptor reactivo con est_uni / status) -->
+                    <!-- SLOT: ESTATUS (Interruptor reactivo con status_id) -->
                     <template #status="{ row, item }">
                         <StatusSwitch
-                            :key="`uni-${(row || item)?.id_uni}-${((row || item)?.est_uni ?? (row || item)?.status)}`"
-                            :status="(row || item)?.est_uni ?? (row || item)?.status"
+                            :key="`uni-${(row || item)?.id_uni}-${resolverStatusId(row || item)}`"
+                            :status="esActivo(row || item)"
                             @toggle="toggleEstatus(row || item)"
                         />
                     </template>
 
-                    <!-- SLOT: ACCIONES DIRECTAS STANDALONE (0 MODALES) -->
+                    <!-- SLOT: ACCIONES ESTÁNDAR -->
                     <template #actions="{ row }">
-                        <div class="flex items-center justify-center gap-1.5">
-                            <!-- Ver Detalle -->
-                            <Button as-child variant="ghost" size="icon" class="h-8 w-8 text-slate-600 hover:text-primary dark:text-slate-400" title="Ver ficha completa">
-                                <Link :href="route('organizacion.universidad.show', row.id_uni)">
-                                    <Eye class="h-4 w-4" />
-                                </Link>
-                            </Button>
-
-                            <!-- Editar -->
-                            <Button as-child variant="ghost" size="icon" class="h-8 w-8 text-amber-600 hover:text-amber-700 dark:text-amber-400" title="Editar datos">
-                                <Link :href="route('organizacion.universidad.edit', row.id_uni)">
-                                    <Pencil class="h-4 w-4" />
-                                </Link>
-                            </Button>
-
-                            <!-- Alternar Estatus / Baja Lógica -->
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                class="h-8 w-8"
-                                :class="isActivo(row) ? 'text-red-600 hover:text-red-700 dark:text-red-400' : 'text-emerald-600 hover:text-emerald-700 dark:text-emerald-400'"
-                                :title="isActivo(row) ? 'Desactivar universidad' : 'Activar universidad'"
-                                @click="toggleEstatus(row)"
-                            >
-                                <Power class="h-4 w-4" />
-                            </Button>
-                        </div>
+                        <CrudActionButtons
+                            show-route="organizacion.universidad.show"
+                            edit-route="organizacion.universidad.edit"
+                            delete-route="organizacion.universidad.destroy"
+                            :record-id="row.id_uni"
+                            :record-name="row.nombre_uni"
+                            confirm-message="¿Está seguro de que desea eliminar esta universidad de la interfaz? Sus datos históricos se conservarán en base de datos."
+                        />
                     </template>
                 </DataTable>
             </div>

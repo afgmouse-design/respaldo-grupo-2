@@ -65,8 +65,8 @@ class TipoUnidadCurricularController extends Controller
         try {
             TipoUnidadCurricular::create([
                 'nombre_tuc' => trim($validated['nombre_tuc']),
-                'status_id'  => 1,
-                'status'     => true,
+                'status_id'  => TipoUnidadCurricular::STATUS_ACTIVO,
+                'created_id' => auth()->id(),
             ]);
 
             return redirect()
@@ -118,6 +118,7 @@ class TipoUnidadCurricularController extends Controller
 
             $tipo->update([
                 'nombre_tuc' => trim($validated['nombre_tuc']),
+                'updated_id' => auth()->id(),
             ]);
 
             return redirect()
@@ -132,23 +133,52 @@ class TipoUnidadCurricularController extends Controller
     }
 
     /**
-     * Realiza la baja lógica del tipo de unidad curricular llamando a alternarEstatus($id, 2).
+     * Alterna el estatus lógico (`status_id` 1 <-> 2) del tipo de unidad curricular sin eliminarlo.
+     */
+    public function toggleStatus(int $id): RedirectResponse
+    {
+        try {
+            $tipo = TipoUnidadCurricular::where('id_tuc', $id)->firstOrFail();
+            $nuevoEstado = TipoUnidadCurricular::esStatusActivo($tipo)
+                ? TipoUnidadCurricular::STATUS_INACTIVO
+                : TipoUnidadCurricular::STATUS_ACTIVO;
+
+            TipoUnidadCurricular::alternarEstatus($id, $nuevoEstado);
+
+            $estadoTexto = $nuevoEstado === TipoUnidadCurricular::STATUS_ACTIVO ? 'activado' : 'inactivado';
+
+            return redirect()
+                ->back()
+                ->with('success', "El tipo de unidad curricular '{$tipo->nombre_tuc}' ha sido {$estadoTexto} exitosamente.");
+        } catch (\Throwable $e) {
+            return redirect()
+                ->back()
+                ->withErrors(['error' => 'No se pudo cambiar el estatus del tipo de unidad curricular: ' . $e->getMessage()]);
+        }
+    }
+
+    /**
+     * Ejecuta la eliminación lógica en interfaz (`deleted_at` + `status_id = 2`)
+     * preservando el registro histórico en PostgreSQL.
+     *
+     * Historial:
+     * - 2026-11-16: Reemplazada la mera inactivación (`alternarEstatus`) por `ejecutarBajaLogicaModelo`.
      */
     public function destroy(int $id): RedirectResponse
     {
         try {
-            $tipo = TipoUnidadCurricular::where('id_tuc', $id)->first();
-            $nombre = $tipo ? $tipo->nombre_tuc : 'Tipo de unidad curricular';
+            $tipo = TipoUnidadCurricular::where('id_tuc', $id)->firstOrFail();
+            $nombre = $tipo->nombre_tuc;
 
-            TipoUnidadCurricular::alternarEstatus($id, 2);
+            TipoUnidadCurricular::ejecutarBajaLogicaModelo($tipo, auth()->id(), TipoUnidadCurricular::STATUS_INACTIVO);
 
             return redirect()
                 ->back()
-                ->with('success', "El tipo de unidad curricular '{$nombre}' ha sido dado de baja (inactivado) exitosamente.");
+                ->with('success', "El tipo de unidad curricular '{$nombre}' ha sido eliminado exitosamente.");
         } catch (\Throwable $e) {
             return redirect()
                 ->back()
-                ->withErrors(['error' => 'No se pudo dar de baja el tipo de unidad curricular: ' . $e->getMessage()]);
+                ->withErrors(['error' => 'No se pudo eliminar el tipo de unidad curricular: ' . $e->getMessage()]);
         }
     }
 }

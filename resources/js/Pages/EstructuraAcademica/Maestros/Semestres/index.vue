@@ -8,39 +8,39 @@
  * Actualización (Interruptor de Estado - StatusSwitch):
  * Se incorporó el suiche interactivo en la columna de Estatus para activar y desactivar
  * tipos de período directamente con confirmación modal.
+ * Actualización (2026-11-16 - Baja Lógica y Estandarización):
+ * Se separa el suiche de estatus (PATCH `toggle_status`) de la eliminación en interfaz (`Trash2` -> DELETE `destroy`).
+ * - 2026-11-16: Estandarización global de acciones con <CrudActionButtons :show-view="false" />.
  */
-import { ref, computed } from 'vue';
 import { Head, Link, router } from '@inertiajs/vue3';
+import { Calendar, Plus, X } from 'lucide-vue-next';
+import { computed } from 'vue';
 import { route } from 'ziggy-js';
-import { Plus, X, Pencil, Power, Calendar } from 'lucide-vue-next';
-
-// Layout e UI Reutilizable
-import AppLayout from '@/layouts/AppLayout.vue';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableEmpty } from '@/components/ui/table';
-import DataPagination from '@/components/ui/DataPagination.vue';
-import SuccessAlert from '@/components/ui/SuccessAlert.vue';
-import Badge from '@/components/ui/badge/Badge.vue';
-import StatusSwitch from '@/components/ui/StatusSwitch.vue';
 import { Button } from '@/components/ui/button';
-import TableSkeleton from '@/components/ui/TableSkeleton.vue';
-
-// Filtros
+import CrudActionButtons from '@/components/ui/CrudActionButtons.vue';
+import DataPagination from '@/components/ui/DataPagination.vue';
 import SearchFilter from '@/components/ui/filters/SearchFilter.vue';
 import TabFilter from '@/components/ui/filters/TabFilter.vue';
-
-// Composables y Tipos
+import StatusSwitch from '@/components/ui/StatusSwitch.vue';
+import SuccessAlert from '@/components/ui/SuccessAlert.vue';
+import { Table, TableBody, TableCell, TableEmpty, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import TableSkeleton from '@/components/ui/TableSkeleton.vue';
+import { useConfirmDialog } from '@/composables/useConfirmDialog';
 import { useDataFetching } from '@/composables/useDataFetching';
 import { useFlashAlert } from '@/composables/useFlashAlert';
-import { useConfirmDialog } from '@/composables/useConfirmDialog';
+import AppLayout from '@/layouts/AppLayout.vue';
+import { esActivo } from '@/lib/status';
 import type { BreadcrumbItem } from '@/types/navigation';
 
 export interface TipoPeriodoItem {
     id_tpd: number;
+    id_tla?: number;
     nombre_tpd: string;
     codigo_tpd?: string | null;
     duracion_semanas_tpd?: number | null;
     descripcion_tpd?: string | null;
-    status: boolean;
+    status_id?: number;
+    status?: boolean;
     est_tpd?: boolean;
     created_at?: string;
     updated_at?: string;
@@ -115,23 +115,24 @@ const cambiarPorPagina = (nuevaCantidad: string | number) => {
     changePerPage(String(nuevaCantidad));
 };
 
-// Utilidad para evaluar el estatus booleano
-const isActivo = (item: any) => {
-    const val = item?.est_tpd ?? item?.status;
-    return val === true || val === 1 || val === '1' || val === 'true';
-};
+// Utilidad para evaluar el estatus (`status_id` o legado)
+const isActivo = (item: any) => esActivo(item);
+
+const obtenerId = (item: any) => item.id_sem ?? item.id_tla ?? item.id_tpd;
 
 // Acciones directas
-const handleToggleStatus = async (item: TipoPeriodoItem) => {
+const handleToggleStatus = async (item: any) => {
     const activo = isActivo(item);
     const accion = activo ? 'desactivar' : 'activar';
-    if (await confirmDialog(`¿Está seguro de que desea ${accion} el tipo de período "${item.nombre_tpd}"?`)) {
-        if (route().has('academico.tipo-periodo.toggle_status')) {
-            router.patch(route('academico.tipo-periodo.toggle_status', item.id_tpd), {}, { preserveScroll: true });
-        } else if (route().has('academico.tipo-periodo.destroy')) {
-            router.delete(route('academico.tipo-periodo.destroy', item.id_tpd), { preserveScroll: true });
-        } else {
-            router.delete(route('semestres.destroy', item.id_tpd), { preserveScroll: true });
+    const id = obtenerId(item);
+    const nombre = item.nombre_sem ?? item.nombre_tla ?? item.nombre_tpd;
+    if (await confirmDialog(`¿Está seguro de que desea ${accion} "${nombre}"?`)) {
+        if (route().has('academico.tipo-periodo.toggle_status') && defaultRouteName === 'academico.tipo-periodo.index') {
+            router.patch(route('academico.tipo-periodo.toggle_status', id), {}, { preserveScroll: true });
+        } else if (route().has('semestres.toggle_status')) {
+            router.patch(route('semestres.toggle_status', id), {}, { preserveScroll: true });
+        } else if (route().has('academico.tipo-periodo.toggle_status')) {
+            router.patch(route('academico.tipo-periodo.toggle_status', id), {}, { preserveScroll: true });
         }
     }
 };
@@ -182,9 +183,9 @@ const getCreateRoute = () => {
                 </div>
 
                 <div class="flex items-center gap-2">
-                    <Button as-child size="default" class="shadow-sm">
-                        <Link :href="route('academico.tipo-periodo.create')">
-                            <Plus class="h-4 w-4 mr-2" />
+                    <Button as-child size="default" class="gap-2 shadow-sm">
+                        <Link :href="getCreateRoute()">
+                            <Plus class="h-4 w-4" />
                             Nuevo Tipo de Período
                         </Link>
                     </Button>
@@ -257,7 +258,7 @@ const getCreateRoute = () => {
                     <TableBody>
                         <TableRow
                             v-for="item in (tiposPeriodo?.data ?? records?.data ?? paginatedData?.data ?? [])"
-                            :key="item.id_tpd"
+                            :key="obtenerId(item)"
                             class="transition-all duration-200 hover:bg-slate-50/50 dark:hover:bg-slate-900/30 border-b border-slate-100 dark:border-slate-900 last:border-0"
                         >
                             <TableCell class="py-3 px-4 font-medium text-slate-900 dark:text-slate-100">
@@ -285,38 +286,20 @@ const getCreateRoute = () => {
 
                             <TableCell class="py-3 px-4 text-center">
                                 <StatusSwitch
-                                    :status="item.est_tpd ?? item.status"
+                                    :key="`tla-${obtenerId(item)}-${item.status_id ?? item.status}`"
+                                    :status="isActivo(item)"
                                     @toggle="handleToggleStatus(item)"
                                 />
                             </TableCell>
 
                             <TableCell class="py-3 px-4 text-center">
-                                <div class="flex items-center justify-center gap-1.5">
-                                    <!-- Botón Editar -->
-                                    <Button
-                                        as-child
-                                        variant="ghost"
-                                        size="icon"
-                                        class="h-8 w-8 text-amber-600 hover:text-amber-700 dark:text-amber-400"
-                                        title="Editar tipo de período"
-                                    >
-                                        <Link :href="route('academico.tipo-periodo.edit', item.id_tpd)">
-                                            <Pencil class="h-4 w-4" />
-                                        </Link>
-                                    </Button>
-
-                                    <!-- Botón Desactivar / Activar -->
-                                    <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        class="h-8 w-8"
-                                        :class="isActivo(item) ? 'text-red-600 hover:text-red-700 dark:text-red-400' : 'text-emerald-600 hover:text-emerald-700 dark:text-emerald-400'"
-                                        :title="isActivo(item) ? 'Desactivar tipo de período' : 'Activar tipo de período'"
-                                        @click="handleToggleStatus(item)"
-                                    >
-                                        <Power class="h-4 w-4" />
-                                    </Button>
-                                </div>
+                                <CrudActionButtons
+                                    :show-view="false"
+                                    :edit-href="getEditRoute(obtenerId(item))"
+                                    :delete-href="defaultRouteName === 'academico.tipo-periodo.index' && route().has('academico.tipo-periodo.destroy') ? route('academico.tipo-periodo.destroy', obtenerId(item)) : route('semestres.destroy', obtenerId(item))"
+                                    :record-id="obtenerId(item)"
+                                    :record-name="item.nombre_sem ?? item.nombre_tla ?? item.nombre_tpd"
+                                />
                             </TableCell>
                         </TableRow>
 

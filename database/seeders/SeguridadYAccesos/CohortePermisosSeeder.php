@@ -2,46 +2,34 @@
 
 namespace Database\Seeders\SeguridadYAccesos;
 
+use Database\Seeders\SeguridadYAccesos\Concerns\SincronizaPermisosModulo;
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 
 /**
- * Seeder: Permisos del maestro Cohorte (módulo Programación Académica).
- * Registra de forma idempotente cohorte.ver / crear / editar / eliminar.
+ * Seeder: Permisos del maestro Cohorte (`cohorte`).
  *
- * Ejecución: php artisan db:seed --class="Database\Seeders\SeguridadYAccesos\CohortePermisosSeeder"
+ * Propósito: Registra de forma idempotente `cohorte.ver/crear/editar/eliminar` en `permiso`
+ * vinculados al módulo `Programación Académica` y la vista `programacion.cohorte`.
+ *
+ * Historial:
+ *  - 2026-11-14: Migrado a `sogac_mio.sql` vía `SincronizaPermisosModulo`.
  */
 class CohortePermisosSeeder extends Seeder
 {
+    use SincronizaPermisosModulo;
+
     public function run(): void
     {
-        if (!Schema::hasTable('modulo') || !Schema::hasTable('permiso')) {
-            $this->command->warn('Tablas "modulo" o "permiso" no existen en la BD actual. Omitiendo inserción de permisos.');
-            return;
-        }
-
-        $now = now();
-
-        DB::table('modulo')->updateOrInsert(
-            ['key' => 'programacion_academica'],
-            ['nombre' => 'Programación Académica', 'activo' => true, 'created_at' => $now, 'updated_at' => $now]
+        $this->sincronizarPermisosDeModulo(
+            'Programación Académica',
+            ['icono_mod' => 'Calendar', 'orden_mod' => 4],
+            [
+                'cohorte.ver'      => 'Ver cohortes',
+                'cohorte.crear'    => 'Crear cohortes',
+                'cohorte.editar'   => 'Editar cohortes',
+                'cohorte.eliminar' => 'Activar/desactivar cohortes',
+            ],
+            'programacion.cohorte'
         );
-        $moduloId = DB::table('modulo')->where('key', 'programacion_academica')->value('id_modulo');
-
-        $permisos = [
-            'cohorte.ver'      => 'Ver cohortes',
-            'cohorte.crear'    => 'Crear cohortes',
-            'cohorte.editar'   => 'Editar cohortes',
-            'cohorte.eliminar' => 'Activar/desactivar cohortes',
-        ];
-
-        foreach ($permisos as $key => $nombre) {
-            DB::table('permiso')->updateOrInsert(
-                ['key' => $key],
-                ['nombre' => $nombre, 'modulo_id' => $moduloId, 'activo' => true, 'created_at' => $now, 'updated_at' => $now]
-            );
-        }
     }
 }
-

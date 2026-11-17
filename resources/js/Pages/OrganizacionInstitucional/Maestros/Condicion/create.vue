@@ -1,23 +1,24 @@
 <script setup lang="ts">
 /**
- * Vista Standalone: Registrar Condición (Organización Institucional).
+ * Vista Standalone: Registrar Condición de Sede (Organización Institucional).
  *
- * Propósito: Permite crear una nueva condición institucional mediante navegación directa SPA.
+ * Propósito: Permite crear una nueva condición operativa en `condicion_sede`.
+ *
+ * Historial:
+ *  - 2026-11-14: Alineado con campos `nombre_cse` y `descripcion_cse` de `condicion_sede`.
+ *  - 2026-11-16: Estandarización del pie de formulario con <CrudFormFooter />.
  */
 import { Head, Link, useForm } from '@inertiajs/vue3';
+import { ArrowLeft, Building2 } from 'lucide-vue-next';
 import { route } from 'ziggy-js';
-import AppLayout from '@/layouts/AppLayout.vue';
 import { Button } from '@/components/ui/button';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
+import CrudFormFooter from '@/components/ui/CrudFormFooter.vue';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
+import AppLayout from '@/layouts/AppLayout.vue';
 import type { BreadcrumbItem } from '@/types/navigation';
-import { ArrowLeft, Save, Building2 } from 'lucide-vue-next';
-
-defineProps<{
-    tiposCondicion?: Array<{ id_tco: number; nombre_tco: string }>;
-}>();
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Dashboard', subtitle: 'Panel Principal', href: route('dashboard') },
@@ -27,8 +28,8 @@ const breadcrumbs: BreadcrumbItem[] = [
 ];
 
 const form = useForm({
-    nombre_cdn: '',
-    descripcion_cdn: '',
+    nombre_cse: '',
+    descripcion_cse: '',
 });
 
 const submit = () => {
@@ -56,7 +57,7 @@ const submit = () => {
                         </h1>
                     </div>
                     <p class="text-sm text-muted-foreground ml-10">
-                        Cree una nueva condición institucional para el registro y control de entidades.
+                        Cree una nueva condición institucional para el registro y control de sedes.
                     </p>
                 </div>
             </div>
@@ -76,45 +77,42 @@ const submit = () => {
                     <CardContent class="space-y-6">
                         <div class="grid grid-cols-1 gap-6">
                             <div class="space-y-2">
-                                <Label for="nombre_cdn">
+                                <Label for="nombre_cse">
                                     Nombre de la Condición <span class="text-destructive">*</span>
                                 </Label>
                                 <Input
-                                    id="nombre_cdn"
-                                    v-model="form.nombre_cdn"
+                                    id="nombre_cse"
+                                    v-model="form.nombre_cse"
                                     type="text"
-                                    placeholder="Ej. Activo Regular, Suspendido..."
-                                    :class="{ 'border-destructive': form.errors.nombre_cdn }"
+                                    placeholder="Ej. Sede Principal, Extensión, Núcleo..."
+                                    :class="{ 'border-destructive': form.errors.nombre_cse }"
                                 />
-                                <span v-if="form.errors.nombre_cdn" class="text-xs text-destructive">
-                                    {{ form.errors.nombre_cdn }}
+                                <span v-if="form.errors.nombre_cse" class="text-xs text-destructive">
+                                    {{ form.errors.nombre_cse }}
                                 </span>
                             </div>
 
                             <div class="space-y-2">
-                                <Label for="descripcion_cdn">Descripción</Label>
+                                <Label for="descripcion_cse">Descripción</Label>
                                 <Textarea
-                                    id="descripcion_cdn"
-                                    v-model="form.descripcion_cdn"
+                                    id="descripcion_cse"
+                                    v-model="form.descripcion_cse"
                                     rows="4"
                                     placeholder="Detalles u observaciones de la condición..."
-                                    :class="{ 'border-destructive': form.errors.descripcion_cdn }"
+                                    :class="{ 'border-destructive': form.errors.descripcion_cse }"
                                 />
-                                <span v-if="form.errors.descripcion_cdn" class="text-xs text-destructive">
-                                    {{ form.errors.descripcion_cdn }}
+                                <span v-if="form.errors.descripcion_cse" class="text-xs text-destructive">
+                                    {{ form.errors.descripcion_cse }}
                                 </span>
                             </div>
                         </div>
                     </CardContent>
 
-                    <CardFooter class="flex justify-end gap-3 border-t border-slate-100 dark:border-slate-800/60 pt-4">
-                        <Button as-child variant="outline" :disabled="form.processing">
-                            <Link :href="route('condicion.index')">Cancelar</Link>
-                        </Button>
-                        <Button type="submit" :disabled="form.processing" class="gap-2">
-                            <Save class="h-4 w-4" />
-                            <span>{{ form.processing ? 'Guardando...' : 'Guardar Condición' }}</span>
-                        </Button>
+                    <CardFooter class="border-t border-slate-100 bg-muted/20 px-6 py-4 dark:border-slate-800/60">
+                        <CrudFormFooter
+                            :cancel-href="route('condicion.index')"
+                            :processing="form.processing"
+                        />
                     </CardFooter>
                 </form>
             </Card>

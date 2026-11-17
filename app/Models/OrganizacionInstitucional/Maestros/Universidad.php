@@ -2,7 +2,10 @@
 
 namespace App\Models\OrganizacionInstitucional\Maestros;
 
+use App\Models\Concerns\HandlesSoftDeleteWithStatus;
 use App\Models\Concerns\RegistraEnBitacora;
+use App\Models\Concerns\UsesStatusCatalog;
+use App\Models\EstructuraGeografica\Maestros\Estado;
 use App\Models\EstructuraGeografica\Maestros\Localidad;
 use App\Models\User;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
@@ -10,169 +13,144 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
  * Modelo: Universidad (tabla `universidad`).
  *
- * Propósito: Entidad institucional matriz que representa la institución
- * de educación universitaria rectora y sus datos normativos y de contacto.
+ * Propósito: Entidad institucional matriz que representa la institución universitaria rectora.
  *
- * Reglas de Arquitectura:
- *  - Sin SoftDeletes (la tabla no posee columna deleted_at).
- *  - Sin timestamps automáticos ($timestamps = false).
- *  - Estatus lógico booleano 'status' (true/false).
- *  - Query Builder puro con DB::table('universidad') para consultas, inserciones y actualizaciones.
- *  - Prohibido el uso de self::query(), create(), update() o save() en métodos de persistencia.
- *
- * Historial de Modificaciones:
- * - [Ajuste de Flujo Institucional]: Incorporación de método estático obtenerRegistroMatriz() para
- *   detectar la institución matriz existente y habilitar redirección directa a su formulario.
+ * Historial:
+ *  - 2026-11-14: Alineado a `sogac_mio.sql` (`cse_id -> condicion_sede.id_cse`, `dpi_id`,
+ *    `esd_id`, `url_pagina_uni`, `fax_uni`, `status_id`, `SoftDeletes`, `users.username`,
+ *    sin columna booleana `status`).
+ *  - 2026-11-16: Añadido `eliminarConCascada` para baja lógica en interfaz (`deleted_at` +
+ *    `status_id = 2`) hacia sedes asociadas sin eliminar filas en PostgreSQL.
  */
 class Universidad extends Model
 {
+    use SoftDeletes;
     use RegistraEnBitacora;
+    use UsesStatusCatalog;
+    use HandlesSoftDeleteWithStatus;
 
-    /** Nombre explícito de la tabla (singular). */
     protected $table = 'universidad';
-
-    /** Llave primaria personalizada. */
     protected $primaryKey = 'id_uni';
-
-    /** Módulo con el que se registran las operaciones en la bitácora. */
     protected $moduloAuditoria = 'Universidad';
 
-    /** Desactivación de timestamps automáticos de Eloquent. */
-    public $timestamps = false;
-
-    /** Atributos asignables masivamente. */
     protected $fillable = [
+        'cse_id',
+        'dpi_id',
+        'esd_id',
+        'loc_id',
         'codigo_ministerio_uni',
         'nombre_uni',
         'siglas_uni',
-        'rif_uni',
-        'gaceta_uni',
-        'fecha_gaceta_uni',
-        'decreto_uni',
-        'fecha_decreto_uni',
         'telefono_uni',
+        'fax_uni',
         'correo_uni',
-        'sitio_web_uni',
-        'logo_uni',
+        'gaceta_uni',
         'fecha_inicio_uni',
         'fecha_fin_uni',
-        'loc_id',
-        'dpi_id',
-        'cdn_id',
-        'status',
+        'url_pagina_uni',
+        'logo_uni',
+        'rif_uni',
+        'decreto_uni',
+        'fecha_gaceta_uni',
+        'fecha_decreto_uni',
+        'status_id',
         'created_id',
         'updated_id',
     ];
 
-    /** Conversión de tipos. */
     protected $casts = [
-        'status' => 'boolean',
-        'fecha_gaceta_uni' => 'date',
+        'id_uni'            => 'integer',
+        'cse_id'            => 'integer',
+        'dpi_id'            => 'integer',
+        'esd_id'            => 'integer',
+        'loc_id'            => 'integer',
+        'gaceta_uni'        => 'integer',
+        'decreto_uni'       => 'integer',
+        'status_id'         => 'integer',
+        'fecha_gaceta_uni'  => 'date',
         'fecha_decreto_uni' => 'date',
-        'fecha_inicio_uni' => 'date',
-        'fecha_fin_uni' => 'date',
+        'fecha_inicio_uni'  => 'date',
+        'fecha_fin_uni'     => 'date',
     ];
 
-    /** Atributos adicionales anexados al array / json. */
-    protected $appends = [
-        'est_uni',
-    ];
-
-    /**
-     * Accesor para compatibilidad con convención est_uni.
-     */
-    public function getEstUniAttribute(): bool
-    {
-        return (bool) $this->status;
-    }
-
-    /**
-     * Mutador: Estandariza el nombre legal eliminando números y aplicando Title Case.
-     */
     public function setNombreUniAttribute($value): void
     {
-        $this->attributes['nombre_uni'] = mb_convert_case(trim(preg_replace('/[0-9]/', '', (string) $value)), MB_CASE_TITLE, 'UTF-8');
+        $this->attributes['nombre_uni'] = mb_convert_case(
+            trim(preg_replace('/[0-9]/', '', (string) $value)),
+            MB_CASE_TITLE,
+            'UTF-8'
+        );
     }
 
-    /**
-     * Mutador: Limpia y formatea las siglas a mayúsculas.
-     */
     public function setSiglasUniAttribute($value): void
     {
         $this->attributes['siglas_uni'] = $value ? mb_strtoupper(trim((string) $value), 'UTF-8') : null;
     }
 
-    /**
-     * Mutador: Estandariza el formato del RIF institucional a mayúsculas.
-     */
     public function setRifUniAttribute($value): void
     {
         $this->attributes['rif_uni'] = $value ? mb_strtoupper(trim((string) $value), 'UTF-8') : null;
     }
 
-    /**
-     * Localidad donde se asienta la sede rectoral (Relación Eloquent).
-     */
+    public function condicionSede(): BelongsTo
+    {
+        return $this->belongsTo(CondicionSede::class, 'cse_id', 'id_cse');
+    }
+
+    public function dependenciaInstitucion(): BelongsTo
+    {
+        return $this->belongsTo(DependenciaInstitucion::class, 'dpi_id', 'id_dpi');
+    }
+
+    public function estado(): BelongsTo
+    {
+        return $this->belongsTo(Estado::class, 'esd_id', 'id_esd');
+    }
+
     public function localidad(): BelongsTo
     {
         return $this->belongsTo(Localidad::class, 'loc_id', 'id_loc');
     }
 
-    /**
-     * Sedes asociadas a la universidad (Relación Eloquent).
-     */
     public function sedes(): HasMany
     {
         return $this->hasMany(Sede::class, 'uni_id', 'id_uni');
     }
 
-    /**
-     * Usuario creador del registro (Relación Eloquent).
-     */
     public function creador(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_id');
     }
 
-    /**
-     * Usuario actualizador del registro (Relación Eloquent).
-     */
     public function actualizador(): BelongsTo
     {
         return $this->belongsTo(User::class, 'updated_id');
     }
 
-    /**
-     * Scope: solo universidades activas.
-     */
     public function scopeActivos(Builder $query): Builder
     {
-        return $query->where('status', true);
+        return $query->where('status_id', self::STATUS_ACTIVO);
     }
 
-    // =========================================================================
-    // MÉTODOS ESTÁTICOS DE QUERY BUILDER PURO (DB::table)
-    // =========================================================================
-
-    /**
-     * 1. Consulta paginada con filtros dinámicos mediante Query Builder puro.
-     */
     public static function obtenerPaginados(array $filtros = [], int $perPage = 5): LengthAwarePaginator
     {
         $search = $filtros['search'] ?? null;
-        $status = $filtros['status'] ?? null;
+        $statusId = static::resolverFiltroStatusId($filtros['status'] ?? $filtros['status_id'] ?? null);
 
         $query = DB::table('universidad')
             ->leftJoin('localidad', 'localidad.id_loc', '=', 'universidad.loc_id')
             ->leftJoin('parroquia', 'parroquia.id_par', '=', 'localidad.par_id')
             ->leftJoin('municipio', 'municipio.id_mun', '=', 'parroquia.mun_id')
             ->leftJoin('estado', 'estado.id_esd', '=', 'municipio.esd_id')
+            ->whereNull('universidad.deleted_at')
+            ->when($statusId !== null, fn ($q) => $q->where('universidad.status_id', $statusId))
             ->select(
                 'universidad.*',
                 'localidad.id_loc as loc_id_loc',
@@ -185,30 +163,20 @@ class Universidad extends Model
                 'estado.nombre_esd as loc_nombre_esd'
             );
 
-        if (!empty($search)) {
+        if (! empty($search)) {
             $query->where(function ($q) use ($search) {
                 $q->where('universidad.nombre_uni', 'ilike', "%{$search}%")
-                  ->orWhere('universidad.siglas_uni', 'ilike', "%{$search}%")
-                  ->orWhere('universidad.rif_uni', 'ilike', "%{$search}%")
-                  ->orWhere('universidad.codigo_ministerio_uni', 'ilike', "%{$search}%");
+                    ->orWhere('universidad.siglas_uni', 'ilike', "%{$search}%")
+                    ->orWhere('universidad.rif_uni', 'ilike', "%{$search}%")
+                    ->orWhere('universidad.codigo_ministerio_uni', 'ilike', "%{$search}%");
             });
-        }
-
-        if (!empty($status) || $status === '0' || $status === false) {
-            if ($status !== 'all') {
-                $query->where('universidad.status', filter_var($status, FILTER_VALIDATE_BOOLEAN));
-            }
         }
 
         $paginator = $query->orderBy('universidad.id_uni', 'desc')
             ->paginate($perPage)
             ->withQueryString();
 
-        // Mapeo y estructuración de datos para compatibilidad con props de Inertia/Vue
         $paginator->getCollection()->transform(function ($item) {
-            $item->status = (bool) $item->status;
-            $item->est_uni = (bool) $item->status;
-
             $item->localidad = $item->loc_id_loc ? (object) [
                 'id_loc'     => $item->loc_id_loc,
                 'nombre_loc' => $item->loc_nombre_loc,
@@ -243,27 +211,35 @@ class Universidad extends Model
         return $paginator;
     }
 
-    /**
-     * 2. Registra una nueva universidad mediante Query Builder puro.
-     */
     public static function registrarUniversidad(array $datos, ?int $userId = null): object
     {
+        $now = now();
+        $cseId = $datos['cse_id'] ?? $datos['cdn_id'] ?? null;
+        $urlPagina = $datos['url_pagina_uni'] ?? $datos['sitio_web_uni'] ?? null;
+
         $insertData = [
             'nombre_uni'            => mb_convert_case(trim(preg_replace('/[0-9]/', '', (string) $datos['nombre_uni'])), MB_CASE_TITLE, 'UTF-8'),
-            'codigo_ministerio_uni' => !empty($datos['codigo_ministerio_uni']) ? trim((string) $datos['codigo_ministerio_uni']) : null,
-            'siglas_uni'            => !empty($datos['siglas_uni']) ? mb_strtoupper(trim((string) $datos['siglas_uni']), 'UTF-8') : null,
-            'rif_uni'               => !empty($datos['rif_uni']) ? mb_strtoupper(trim((string) $datos['rif_uni']), 'UTF-8') : null,
-            'telefono_uni'          => !empty($datos['telefono_uni']) ? trim((string) $datos['telefono_uni']) : null,
-            'correo_uni'            => !empty($datos['correo_uni']) ? trim((string) $datos['correo_uni']) : null,
-            'sitio_web_uni'         => !empty($datos['sitio_web_uni']) ? trim((string) $datos['sitio_web_uni']) : null,
-            'gaceta_uni'            => !empty($datos['gaceta_uni']) ? trim((string) $datos['gaceta_uni']) : null,
-            'fecha_gaceta_uni'      => !empty($datos['fecha_gaceta_uni']) ? $datos['fecha_gaceta_uni'] : null,
-            'decreto_uni'           => !empty($datos['decreto_uni']) ? trim((string) $datos['decreto_uni']) : null,
-            'fecha_decreto_uni'     => !empty($datos['fecha_decreto_uni']) ? $datos['fecha_decreto_uni'] : null,
-            'fecha_inicio_uni'      => !empty($datos['fecha_inicio_uni']) ? $datos['fecha_inicio_uni'] : null,
-            'fecha_fin_uni'         => !empty($datos['fecha_fin_uni']) ? $datos['fecha_fin_uni'] : null,
-            'loc_id'                => !empty($datos['loc_id']) ? (int) $datos['loc_id'] : null,
-            'status'                => true,
+            'codigo_ministerio_uni' => ! empty($datos['codigo_ministerio_uni']) ? substr(trim((string) $datos['codigo_ministerio_uni']), 0, 10) : null,
+            'siglas_uni'            => ! empty($datos['siglas_uni']) ? substr(mb_strtoupper(trim((string) $datos['siglas_uni']), 'UTF-8'), 0, 10) : null,
+            'rif_uni'               => ! empty($datos['rif_uni']) ? substr(mb_strtoupper(trim((string) $datos['rif_uni']), 'UTF-8'), 0, 12) : null,
+            'telefono_uni'          => ! empty($datos['telefono_uni']) ? substr(trim((string) $datos['telefono_uni']), 0, 12) : null,
+            'fax_uni'               => ! empty($datos['fax_uni']) ? substr(trim((string) $datos['fax_uni']), 0, 12) : null,
+            'correo_uni'            => ! empty($datos['correo_uni']) ? trim((string) $datos['correo_uni']) : null,
+            'url_pagina_uni'        => ! empty($urlPagina) ? trim((string) $urlPagina) : null,
+            'logo_uni'              => ! empty($datos['logo_uni']) ? trim((string) $datos['logo_uni']) : null,
+            'gaceta_uni'            => isset($datos['gaceta_uni']) && $datos['gaceta_uni'] !== '' ? (int) preg_replace('/\D/', '', (string) $datos['gaceta_uni']) : null,
+            'fecha_gaceta_uni'      => ! empty($datos['fecha_gaceta_uni']) ? $datos['fecha_gaceta_uni'] : null,
+            'decreto_uni'           => isset($datos['decreto_uni']) && $datos['decreto_uni'] !== '' ? (int) preg_replace('/\D/', '', (string) $datos['decreto_uni']) : null,
+            'fecha_decreto_uni'     => ! empty($datos['fecha_decreto_uni']) ? $datos['fecha_decreto_uni'] : null,
+            'fecha_inicio_uni'      => ! empty($datos['fecha_inicio_uni']) ? $datos['fecha_inicio_uni'] : null,
+            'fecha_fin_uni'         => ! empty($datos['fecha_fin_uni']) ? $datos['fecha_fin_uni'] : null,
+            'cse_id'                => ! empty($cseId) ? (int) $cseId : null,
+            'dpi_id'                => ! empty($datos['dpi_id']) ? (int) $datos['dpi_id'] : null,
+            'esd_id'                => ! empty($datos['esd_id']) ? (int) $datos['esd_id'] : null,
+            'loc_id'                => ! empty($datos['loc_id']) ? (int) $datos['loc_id'] : null,
+            'status_id'             => isset($datos['status_id']) ? (int) $datos['status_id'] : self::STATUS_ACTIVO,
+            'created_at'            => $now,
+            'updated_at'            => $now,
         ];
 
         if ($userId || auth()->check()) {
@@ -275,65 +251,80 @@ class Universidad extends Model
         return static::obtenerPorId($id);
     }
 
-    /**
-     * Alias de registrarUniversidad para compatibilidad.
-     */
     public static function crearUniversidad(array $datos, ?int $userId = null): object
     {
         return static::registrarUniversidad($datos, $userId);
     }
 
-    /**
-     * 3. Actualiza una universidad existente mediante Query Builder puro.
-     */
     public static function actualizarUniversidad(int $id_uni, array $datos, ?int $userId = null): object
     {
-        $updateData = [];
+        $updateData = ['updated_at' => now()];
 
         if (array_key_exists('nombre_uni', $datos)) {
             $updateData['nombre_uni'] = mb_convert_case(trim(preg_replace('/[0-9]/', '', (string) $datos['nombre_uni'])), MB_CASE_TITLE, 'UTF-8');
         }
         if (array_key_exists('codigo_ministerio_uni', $datos)) {
-            $updateData['codigo_ministerio_uni'] = !empty($datos['codigo_ministerio_uni']) ? trim((string) $datos['codigo_ministerio_uni']) : null;
+            $updateData['codigo_ministerio_uni'] = ! empty($datos['codigo_ministerio_uni']) ? substr(trim((string) $datos['codigo_ministerio_uni']), 0, 10) : null;
         }
         if (array_key_exists('siglas_uni', $datos)) {
-            $updateData['siglas_uni'] = !empty($datos['siglas_uni']) ? mb_strtoupper(trim((string) $datos['siglas_uni']), 'UTF-8') : null;
+            $updateData['siglas_uni'] = ! empty($datos['siglas_uni']) ? substr(mb_strtoupper(trim((string) $datos['siglas_uni']), 'UTF-8'), 0, 10) : null;
         }
         if (array_key_exists('rif_uni', $datos)) {
-            $updateData['rif_uni'] = !empty($datos['rif_uni']) ? mb_strtoupper(trim((string) $datos['rif_uni']), 'UTF-8') : null;
+            $updateData['rif_uni'] = ! empty($datos['rif_uni']) ? substr(mb_strtoupper(trim((string) $datos['rif_uni']), 'UTF-8'), 0, 12) : null;
         }
         if (array_key_exists('telefono_uni', $datos)) {
-            $updateData['telefono_uni'] = !empty($datos['telefono_uni']) ? trim((string) $datos['telefono_uni']) : null;
+            $updateData['telefono_uni'] = ! empty($datos['telefono_uni']) ? substr(trim((string) $datos['telefono_uni']), 0, 12) : null;
+        }
+        if (array_key_exists('fax_uni', $datos)) {
+            $updateData['fax_uni'] = ! empty($datos['fax_uni']) ? substr(trim((string) $datos['fax_uni']), 0, 12) : null;
         }
         if (array_key_exists('correo_uni', $datos)) {
-            $updateData['correo_uni'] = !empty($datos['correo_uni']) ? trim((string) $datos['correo_uni']) : null;
+            $updateData['correo_uni'] = ! empty($datos['correo_uni']) ? trim((string) $datos['correo_uni']) : null;
         }
-        if (array_key_exists('sitio_web_uni', $datos)) {
-            $updateData['sitio_web_uni'] = !empty($datos['sitio_web_uni']) ? trim((string) $datos['sitio_web_uni']) : null;
+        if (array_key_exists('url_pagina_uni', $datos) || array_key_exists('sitio_web_uni', $datos)) {
+            $urlPagina = $datos['url_pagina_uni'] ?? $datos['sitio_web_uni'] ?? null;
+            $updateData['url_pagina_uni'] = ! empty($urlPagina) ? trim((string) $urlPagina) : null;
+        }
+        if (array_key_exists('logo_uni', $datos)) {
+            $updateData['logo_uni'] = ! empty($datos['logo_uni']) ? trim((string) $datos['logo_uni']) : null;
         }
         if (array_key_exists('gaceta_uni', $datos)) {
-            $updateData['gaceta_uni'] = !empty($datos['gaceta_uni']) ? trim((string) $datos['gaceta_uni']) : null;
+            $updateData['gaceta_uni'] = $datos['gaceta_uni'] !== null && $datos['gaceta_uni'] !== '' ? (int) preg_replace('/\D/', '', (string) $datos['gaceta_uni']) : null;
         }
         if (array_key_exists('fecha_gaceta_uni', $datos)) {
-            $updateData['fecha_gaceta_uni'] = !empty($datos['fecha_gaceta_uni']) ? $datos['fecha_gaceta_uni'] : null;
+            $updateData['fecha_gaceta_uni'] = ! empty($datos['fecha_gaceta_uni']) ? $datos['fecha_gaceta_uni'] : null;
         }
         if (array_key_exists('decreto_uni', $datos)) {
-            $updateData['decreto_uni'] = !empty($datos['decreto_uni']) ? trim((string) $datos['decreto_uni']) : null;
+            $updateData['decreto_uni'] = $datos['decreto_uni'] !== null && $datos['decreto_uni'] !== '' ? (int) preg_replace('/\D/', '', (string) $datos['decreto_uni']) : null;
         }
         if (array_key_exists('fecha_decreto_uni', $datos)) {
-            $updateData['fecha_decreto_uni'] = !empty($datos['fecha_decreto_uni']) ? $datos['fecha_decreto_uni'] : null;
+            $updateData['fecha_decreto_uni'] = ! empty($datos['fecha_decreto_uni']) ? $datos['fecha_decreto_uni'] : null;
         }
         if (array_key_exists('fecha_inicio_uni', $datos)) {
-            $updateData['fecha_inicio_uni'] = !empty($datos['fecha_inicio_uni']) ? $datos['fecha_inicio_uni'] : null;
+            $updateData['fecha_inicio_uni'] = ! empty($datos['fecha_inicio_uni']) ? $datos['fecha_inicio_uni'] : null;
         }
         if (array_key_exists('fecha_fin_uni', $datos)) {
-            $updateData['fecha_fin_uni'] = !empty($datos['fecha_fin_uni']) ? $datos['fecha_fin_uni'] : null;
+            $updateData['fecha_fin_uni'] = ! empty($datos['fecha_fin_uni']) ? $datos['fecha_fin_uni'] : null;
+        }
+        if (array_key_exists('cse_id', $datos) || array_key_exists('cdn_id', $datos)) {
+            $cseId = $datos['cse_id'] ?? $datos['cdn_id'] ?? null;
+            $updateData['cse_id'] = ! empty($cseId) ? (int) $cseId : null;
+        }
+        if (array_key_exists('dpi_id', $datos)) {
+            $updateData['dpi_id'] = ! empty($datos['dpi_id']) ? (int) $datos['dpi_id'] : null;
+        }
+        if (array_key_exists('esd_id', $datos)) {
+            $updateData['esd_id'] = ! empty($datos['esd_id']) ? (int) $datos['esd_id'] : null;
         }
         if (array_key_exists('loc_id', $datos)) {
-            $updateData['loc_id'] = !empty($datos['loc_id']) ? (int) $datos['loc_id'] : null;
+            $updateData['loc_id'] = ! empty($datos['loc_id']) ? (int) $datos['loc_id'] : null;
         }
-        if (array_key_exists('status', $datos)) {
-            $updateData['status'] = filter_var($datos['status'], FILTER_VALIDATE_BOOLEAN);
+        if (array_key_exists('status_id', $datos)) {
+            $updateData['status_id'] = (int) $datos['status_id'];
+        } elseif (array_key_exists('status', $datos)) {
+            $updateData['status_id'] = filter_var($datos['status'], FILTER_VALIDATE_BOOLEAN)
+                ? self::STATUS_ACTIVO
+                : self::STATUS_INACTIVO;
         }
 
         if ($userId || auth()->check()) {
@@ -342,160 +333,159 @@ class Universidad extends Model
 
         DB::table('universidad')
             ->where('id_uni', $id_uni)
+            ->whereNull('deleted_at')
             ->update($updateData);
 
         return static::obtenerPorId($id_uni);
     }
 
-    /**
-     * 4. Busca una universidad por su clave primaria mediante Query Builder puro.
-     */
     public static function obtenerPorId(int $id_uni): object
     {
-        $universidad = DB::table('universidad')->where('id_uni', $id_uni)->first();
+        $universidad = DB::table('universidad')
+            ->where('id_uni', $id_uni)
+            ->whereNull('deleted_at')
+            ->first();
 
-        if (!$universidad) {
+        if (! $universidad) {
             abort(404, 'Universidad no encontrada.');
         }
-
-        $universidad->status = (bool) $universidad->status;
-        $universidad->est_uni = (bool) $universidad->status;
 
         return $universidad;
     }
 
-    /**
-     * Obtiene una universidad para la vista de edición.
-     */
     public static function obtenerParaEditar(int $id_uni): object
     {
         return static::obtenerPorId($id_uni);
     }
 
-    /**
-     * Obtiene el detalle de una universidad con su localidad, jerarquía territorial y usuarios auditores.
-     */
     public static function obtenerConRelaciones(int $id_uni): object
     {
         $universidad = static::obtenerPorId($id_uni);
 
+        $universidad->condicion_sede = $universidad->cse_id
+            ? DB::table('condicion_sede')->select(['id_cse', 'nombre_cse'])->where('id_cse', $universidad->cse_id)->first()
+            : null;
+
+        $universidad->dependencia_institucion = $universidad->dpi_id
+            ? DB::table('dependencia_institucion')->select(['id_dpi', 'nombre_dpi'])->where('id_dpi', $universidad->dpi_id)->first()
+            : null;
+
         if ($universidad->loc_id) {
-            $localidad = DB::table('localidad')
-                ->select(['id_loc', 'nombre_loc', 'par_id'])
-                ->where('id_loc', $universidad->loc_id)
-                ->first();
-
+            $localidad = DB::table('localidad')->select(['id_loc', 'nombre_loc', 'par_id'])->where('id_loc', $universidad->loc_id)->first();
             if ($localidad) {
-                $parroquia = DB::table('parroquia')
-                    ->select(['id_par', 'nombre_par', 'mun_id'])
-                    ->where('id_par', $localidad->par_id)
-                    ->first();
-
+                $parroquia = DB::table('parroquia')->select(['id_par', 'nombre_par', 'mun_id'])->where('id_par', $localidad->par_id)->first();
                 if ($parroquia) {
-                    $municipio = DB::table('municipio')
-                        ->select(['id_mun', 'nombre_mun', 'esd_id'])
-                        ->where('id_mun', $parroquia->mun_id)
-                        ->first();
-
+                    $municipio = DB::table('municipio')->select(['id_mun', 'nombre_mun', 'esd_id'])->where('id_mun', $parroquia->mun_id)->first();
                     if ($municipio) {
-                        $estado = DB::table('estado')
-                            ->select(['id_esd', 'nombre_esd', 'pai_id'])
-                            ->where('id_esd', $municipio->esd_id)
-                            ->first();
-
+                        $estado = DB::table('estado')->select(['id_esd', 'nombre_esd', 'pai_id'])->where('id_esd', $municipio->esd_id)->first();
                         if ($estado) {
-                            $estado->pais = DB::table('pais')
-                                ->select(['id_pai', 'nombre_pai'])
-                                ->where('id_pai', $estado->pai_id)
-                                ->first();
+                            $estado->pais = DB::table('pais')->select(['id_pai', 'nombre_pai'])->where('id_pai', $estado->pai_id)->first();
                         }
-
                         $municipio->estado = $estado;
                     }
-
                     $parroquia->municipio = $municipio;
                 }
-
                 $localidad->parroquia = $parroquia;
             }
-
             $universidad->localidad = $localidad;
         } else {
             $universidad->localidad = null;
         }
 
-        // Creador y Actualizador
         $universidad->creador = $universidad->created_id
-            ? DB::table('users')->select(['id', 'name', 'email'])->where('id', $universidad->created_id)->first()
+            ? DB::table('users')->select(['id', 'username', 'email'])->where('id', $universidad->created_id)->first()
             : null;
 
         $universidad->actualizador = $universidad->updated_id
-            ? DB::table('users')->select(['id', 'name', 'email'])->where('id', $universidad->updated_id)->first()
+            ? DB::table('users')->select(['id', 'username', 'email'])->where('id', $universidad->updated_id)->first()
             : null;
 
         return $universidad;
     }
 
-    /**
-     * Obtiene universidades activas para llenar selectores dependientes mediante Query Builder puro.
-     */
     public static function obtenerActivosParaSelect(): Collection
     {
         return DB::table('universidad')
             ->select(['id_uni', 'nombre_uni', 'siglas_uni'])
-            ->where('status', true)
+            ->where('status_id', self::STATUS_ACTIVO)
+            ->whereNull('deleted_at')
             ->orderBy('nombre_uni', 'asc')
             ->get();
     }
 
-    /**
-     * Alterna el estatus lógico de la universidad y propaga en cascada hacia sus sedes.
-     */
     public static function alternarEstatusConCascada(int $id_uni, ?int $userId = null): array
     {
         return DB::transaction(function () use ($id_uni, $userId) {
             $universidad = static::obtenerPorId($id_uni);
-            $nuevoEstatus = !$universidad->status;
+            $activar = ! static::esStatusActivo($universidad);
+            $nuevoStatusId = $activar ? self::STATUS_ACTIVO : self::STATUS_INACTIVO;
             $usuarioId = $userId ?? auth()->id();
+            $now = now();
 
-            // 1. Actualizar Universidad
             DB::table('universidad')
                 ->where('id_uni', $id_uni)
                 ->update([
-                    'status'     => $nuevoEstatus,
+                    'status_id'  => $nuevoStatusId,
                     'updated_id' => $usuarioId,
+                    'updated_at' => $now,
                 ]);
 
-            // 2. Si se desactiva, propagar en cascada desactivación a sus sedes
-            if (!$nuevoEstatus) {
+            if (! $activar) {
                 DB::table('sede')
                     ->where('uni_id', $id_uni)
                     ->update([
-                        'status'     => false,
+                        'status_id'  => self::STATUS_INACTIVO,
                         'updated_id' => $usuarioId,
+                        'updated_at' => $now,
                     ]);
             }
 
             return [
-                'nombre'  => $universidad->nombre_uni,
-                'estatus' => $nuevoEstatus,
+                'nombre'    => $universidad->nombre_uni,
+                'status_id' => $nuevoStatusId,
+                'estatus'   => $activar,
             ];
         });
     }
 
-    /**
-     * Alias de alternarEstatusConCascada.
-     */
     public static function alternarEstatus(int $id_uni, ?int $userId = null): array
     {
         return static::alternarEstatusConCascada($id_uni, $userId);
     }
 
     /**
-     * Obtiene la institución universitaria matriz registrada en el sistema.
+     * Elimina lógicamente la universidad y sus sedes dependientes (`deleted_at` + `status_id = 2`)
+     * preservando todos los registros en PostgreSQL.
      */
+    public static function eliminarConCascada(int $id_uni, ?int $userId = null): array
+    {
+        return DB::transaction(function () use ($id_uni, $userId) {
+            $universidad = static::find($id_uni);
+            if (! $universidad) {
+                abort(404, 'Universidad no encontrada.');
+            }
+
+            $nombre = $universidad->nombre_uni;
+
+            static::ejecutarBajaLogicaConHijos(
+                $universidad,
+                [
+                    ['table' => 'sede', 'pk' => 'id_sed', 'fk' => 'uni_id'],
+                ],
+                $userId,
+                self::STATUS_INACTIVO
+            );
+
+            return [
+                'nombre'    => $nombre,
+                'status_id' => self::STATUS_INACTIVO,
+                'estatus'   => false,
+            ];
+        });
+    }
+
     public static function obtenerRegistroMatriz(): ?object
     {
-        return DB::table('universidad')->orderBy('id_uni', 'asc')->first();
+        return DB::table('universidad')->whereNull('deleted_at')->orderBy('id_uni', 'asc')->first();
     }
 }

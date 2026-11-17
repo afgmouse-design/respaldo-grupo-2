@@ -6,7 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\OrganizacionInstitucional\Maestros\StoreSedeRequest;
 use App\Http\Requests\OrganizacionInstitucional\Maestros\UpdateSedeRequest;
 use App\Models\EstructuraGeografica\Maestros\Localidad;
-use App\Models\OrganizacionInstitucional\Maestros\Condicion;
+use App\Models\OrganizacionInstitucional\Maestros\CondicionSede;
 use App\Models\OrganizacionInstitucional\Maestros\Sede;
 use App\Models\OrganizacionInstitucional\Maestros\Universidad;
 use Illuminate\Http\RedirectResponse;
@@ -60,7 +60,7 @@ class SedeController extends Controller
 
         $universidades = Universidad::obtenerActivosParaSelect();
         $localidades = Localidad::obtenerActivosConJerarquia();
-        $condiciones = Condicion::obtenerActivosParaSelect();
+        $condiciones = CondicionSede::obtenerActivosParaSelect();
 
         return Inertia::render('OrganizacionInstitucional/Sede/create', [
             'universidades' => $universidades,
@@ -116,7 +116,7 @@ class SedeController extends Controller
 
         $universidades = Universidad::obtenerActivosParaSelect();
         $localidades = Localidad::obtenerActivosConJerarquia();
-        $condiciones = Condicion::obtenerActivosParaSelect();
+        $condiciones = CondicionSede::obtenerActivosParaSelect();
 
         return Inertia::render('OrganizacionInstitucional/Sede/edit', [
             'sede'          => $sede,
@@ -155,6 +155,8 @@ class SedeController extends Controller
      */
     public function toggleStatus(int $id_sed): RedirectResponse
     {
+        $this->authorize('delete', Sede::class);
+
         try {
             $resultado = Sede::alternarEstatus($id_sed, auth()->id());
 
@@ -176,17 +178,22 @@ class SedeController extends Controller
     }
 
     /**
-     * Da de baja lógica a la sede.
+     * Da de baja lógica real en interfaz a la sede (`deleted_at` + `status_id = 2`),
+     * manteniendo el registro intacto en PostgreSQL.
+     *
+     * Historial:
+     * - 2026-11-16: Reemplazada la mera inactivación (`alternarEstatus`) por `eliminarConSoftDelete`.
      */
     public function destroy(int $id_sed): RedirectResponse
     {
+        $this->authorize('delete', Sede::class);
+
         try {
-            $resultado = Sede::alternarEstatus($id_sed, false);
-            $estadoTexto = $resultado['estatus'] ? 'activada' : 'inactivada';
+            $resultado = Sede::eliminarConSoftDelete($id_sed, auth()->id());
 
             return redirect()
                 ->back()
-                ->with('success', "La sede '{$resultado['nombre']}' ha sido {$estadoTexto} exitosamente.");
+                ->with('success', "La sede '{$resultado['nombre']}' ha sido eliminada exitosamente.");
         } catch (\DomainException $e) {
             return redirect()
                 ->back()

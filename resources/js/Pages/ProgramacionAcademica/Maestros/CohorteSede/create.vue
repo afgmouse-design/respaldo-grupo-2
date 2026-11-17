@@ -4,25 +4,27 @@
  *
  * Propósito: Registro de oferta de cohorte en una sede/programa mediante navegación directa SPA.
  *
- * Actualización 2026-11-01 (Mejora UX y Auto-sugerencia):
- * Se agregó sugerencia automática de nombre descriptivo al seleccionar cohorte y oferta Sede-PNF,
- * y mensajes informativos cuando no existen ofertas o cohortes registradas.
+ * Actualización 2026-11-14: Alineado a `sede_programa(id_spr)` preservando compatibilidad con `id_sep`.
+ * - 2026-11-16: Estandarización del pie de formulario con <CrudFormFooter />.
  */
-import { watch } from 'vue';
 import { Head, Link, useForm } from '@inertiajs/vue3';
+import { ArrowLeft, MapPin } from 'lucide-vue-next';
+import { watch } from 'vue';
 import { route } from 'ziggy-js';
-import AppLayout from '@/layouts/AppLayout.vue';
 import { Button } from '@/components/ui/button';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
+import CrudFormFooter from '@/components/ui/CrudFormFooter.vue';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
+import AppLayout from '@/layouts/AppLayout.vue';
 import type { BreadcrumbItem } from '@/types/navigation';
-import { ArrowLeft, Save, MapPin } from 'lucide-vue-next';
 
 const props = defineProps<{
     cohortes: Array<{ id_coh: number; nombre_coh: string }>;
-    ofertasSedePnf: Array<{ id_sep: number; descripcion_oferta: string }>;
+    ofertasSedePnf: Array<{ id_spr?: number; id_sep?: number; descripcion_oferta: string }>;
 }>();
+
+const resolverOfertaId = (o: { id_spr?: number; id_sep?: number }) => o.id_spr ?? o.id_sep ?? 0;
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Dashboard', subtitle: 'Panel Principal', href: route('dashboard') },
@@ -41,7 +43,7 @@ const form = useForm({
 watch([() => form.coh_id, () => form.sep_id], ([cohId, sepId]) => {
     if (!form.nombre_cos && cohId && sepId) {
         const coh = props.cohortes.find((c) => c.id_coh === Number(cohId));
-        const sep = props.ofertasSedePnf.find((s) => s.id_sep === Number(sepId));
+        const sep = props.ofertasSedePnf.find((s) => resolverOfertaId(s) === Number(sepId));
         if (coh && sep) {
             form.nombre_cos = `Cohorte ${coh.nombre_coh} - ${sep.descripcion_oferta}`;
         }
@@ -126,7 +128,7 @@ const submit = () => {
                                     :class="{ 'border-destructive': form.errors.sep_id }"
                                 >
                                     <option value="" disabled>Seleccione sede y programa...</option>
-                                    <option v-for="o in ofertasSedePnf" :key="o.id_sep" :value="o.id_sep">
+                                    <option v-for="o in ofertasSedePnf" :key="resolverOfertaId(o)" :value="resolverOfertaId(o)">
                                         {{ o.descripcion_oferta }}
                                     </option>
                                 </select>
@@ -156,14 +158,11 @@ const submit = () => {
                         </div>
                     </CardContent>
 
-                    <CardFooter class="flex justify-end gap-3 border-t border-slate-100 dark:border-slate-800/60 pt-4">
-                        <Button as-child variant="outline" :disabled="form.processing">
-                            <Link :href="route('cohorte_sede.index')">Cancelar</Link>
-                        </Button>
-                        <Button type="submit" :disabled="form.processing" class="gap-2">
-                            <Save class="h-4 w-4" />
-                            <span>{{ form.processing ? 'Guardando...' : 'Guardar Asignación' }}</span>
-                        </Button>
+                    <CardFooter class="border-t border-slate-100 bg-muted/20 px-6 py-4 dark:border-slate-800/60">
+                        <CrudFormFooter
+                            :cancel-href="route('cohorte_sede.index')"
+                            :processing="form.processing"
+                        />
                     </CardFooter>
                 </form>
             </Card>

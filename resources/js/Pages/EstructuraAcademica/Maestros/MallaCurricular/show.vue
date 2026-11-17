@@ -4,35 +4,45 @@
  *
  * Propósito: Ficha técnica y de consulta completa de una Malla Curricular registrada,
  * mostrando datos del plan de estudio, PNF asociado, resolución ministerial y unidades curriculares.
+ *
+ * Historial:
+ *  - 2026-11-16: Visualización de parámetros académicos en detalle (`HTE (HEA/HEI)`, `Duración`
+ *    en semestres y `Nota Aprobatoria`) y ordenado de importaciones.
  */
-import { computed } from 'vue';
 import { Head, Link } from '@inertiajs/vue3';
-import { route } from 'ziggy-js';
-import AppLayout from '@/layouts/AppLayout.vue';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
-import type { BreadcrumbItem } from '@/types/navigation';
 import {
-    Network,
     ArrowLeft,
-    Pencil,
-    GraduationCap,
-    FileText,
-    Calendar,
-    BookOpen,
-    Layers,
-    Clock,
     Award,
+    BookOpen,
+    Calendar,
     CheckCircle2,
-    XCircle,
+    Clock,
+    FileText,
+    GraduationCap,
     Info,
+    Layers,
+    Network,
+    Pencil,
+    XCircle,
 } from 'lucide-vue-next';
+import { computed } from 'vue';
+import { route } from 'ziggy-js';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
+import AppLayout from '@/layouts/AppLayout.vue';
+import { esActivo as esRegistroActivo } from '@/lib/status';
+import type { BreadcrumbItem } from '@/types/navigation';
 
-interface PnfItem {
-    id_pnf: number;
+interface ProgramaItem {
+    id_prg?: number;
+    id_pnf?: number;
+    codigo_prg?: string | null;
+    codigo_ministerio_prg?: string | null;
     codigo_pnf?: string | null;
-    nombre_pnf: string;
+    nombre_prg?: string;
+    nombre_pnf?: string;
+    status_id?: number;
     status?: boolean;
 }
 
@@ -64,7 +74,9 @@ interface MallaCurricularDetalleItem {
     htea_mcd?: number | null;
     htei_mcd?: number | null;
     thte_mcd?: number | null;
+    duracion_semestres_mcd?: number | null;
     duracion_semanas_mcd?: number | null;
+    nota_minima_aprobatoria_mcd?: number | null;
     unidad_curricular?: UnidadCurricularItem | null;
     trayecto?: TrayectoItem | null;
     eje_curricular?: EjeCurricularItem | null;
@@ -80,7 +92,15 @@ interface MallaCurricularItem {
     version_pensum_mac?: string | null;
     fecha_aprobacion_mac: string | null;
     observacion_mac: string | null;
-    pnf_id: number;
+    prg_id?: number;
+    pnf_id?: number;
+    total_credito_tsu_mac?: number | null;
+    total_horas_tsu_mac?: number | null;
+    total_unidades_tsu_mac?: number | null;
+    total_credito_ing_mac?: number | null;
+    total_horas_ing_mac?: number | null;
+    total_unidades_ing_mac?: number | null;
+    total_credito_prosecucion_mac?: number | null;
     creditos_minimos_tsu_mac?: number | null;
     horas_minimas_tsu_mac?: number | null;
     materias_obligatorias_tsu_mac?: number | null;
@@ -88,7 +108,8 @@ interface MallaCurricularItem {
     horas_minimas_ing_mac?: number | null;
     materias_obligatorias_ing_mac?: number | null;
     creditos_minimos_prosecucion_mac?: number | null;
-    pnf?: PnfItem | null;
+    programa?: ProgramaItem | null;
+    pnf?: ProgramaItem | null;
     detalles?: MallaCurricularDetalleItem[] | null;
     status_id?: number;
     status?: boolean;
@@ -100,9 +121,8 @@ const props = defineProps<{
     malla: MallaCurricularItem;
 }>();
 
-const esActivo = computed(() => {
-    return props.malla.status ?? (props.malla.status_id === 1);
-});
+const programaActual = computed(() => props.malla.programa ?? props.malla.pnf ?? null);
+const esActivo = computed(() => esRegistroActivo(props.malla));
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Dashboard', subtitle: 'Panel Principal', href: route('dashboard') },
@@ -195,14 +215,14 @@ const totalHoras = computed(() => {
                             <span class="text-xs font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
                                 <GraduationCap class="h-3.5 w-3.5" /> Programa (PNF) Asignado
                             </span>
-                            <p v-if="malla.pnf" class="text-base font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                                <span>{{ malla.pnf.nombre_pnf }}</span>
-                                <span v-if="malla.pnf.codigo_pnf" class="text-xs font-mono px-2 py-0.5 rounded bg-muted text-muted-foreground">
-                                    {{ malla.pnf.codigo_pnf }}
+                            <p v-if="programaActual" class="text-base font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                                <span>{{ programaActual.nombre_prg || programaActual.nombre_pnf }}</span>
+                                <span v-if="programaActual.codigo_prg || programaActual.codigo_ministerio_prg || programaActual.codigo_pnf" class="text-xs font-mono px-2 py-0.5 rounded bg-muted text-muted-foreground">
+                                    {{ programaActual.codigo_prg || programaActual.codigo_ministerio_prg || programaActual.codigo_pnf }}
                                 </span>
                             </p>
                             <p v-else class="text-sm italic text-muted-foreground">
-                                Sin PNF asignado
+                                Sin programa asignado
                             </p>
                         </div>
 
@@ -264,19 +284,19 @@ const totalHoras = computed(() => {
                                 <div class="bg-background/80 p-2.5 rounded-lg border">
                                     <div class="text-[11px] text-muted-foreground">Créditos (UC)</div>
                                     <div class="text-lg font-bold text-amber-600 dark:text-amber-400">
-                                        {{ malla.creditos_minimos_tsu_mac || 96 }}
+                                        {{ malla.total_credito_tsu_mac ?? malla.creditos_minimos_tsu_mac ?? 0 }}
                                     </div>
                                 </div>
                                 <div class="bg-background/80 p-2.5 rounded-lg border">
                                     <div class="text-[11px] text-muted-foreground">Horas Totales</div>
                                     <div class="text-lg font-bold text-foreground">
-                                        {{ malla.horas_minimas_tsu_mac || 2880 }}h
+                                        {{ malla.total_horas_tsu_mac ?? malla.horas_minimas_tsu_mac ?? 0 }}h
                                     </div>
                                 </div>
                                 <div class="bg-background/80 p-2.5 rounded-lg border">
-                                    <div class="text-[11px] text-muted-foreground">Materias Oblig.</div>
+                                    <div class="text-[11px] text-muted-foreground">Unidades</div>
                                     <div class="text-lg font-bold text-foreground">
-                                        {{ malla.materias_obligatorias_tsu_mac || 20 }}
+                                        {{ malla.total_unidades_tsu_mac ?? malla.materias_obligatorias_tsu_mac ?? 0 }}
                                     </div>
                                 </div>
                             </div>
@@ -292,25 +312,25 @@ const totalHoras = computed(() => {
                                 <div class="bg-background/80 p-2 rounded-lg border">
                                     <div class="text-[10px] text-muted-foreground">Total UC</div>
                                     <div class="text-base font-bold text-indigo-600 dark:text-indigo-400">
-                                        {{ malla.creditos_minimos_ing_mac || 180 }}
+                                        {{ malla.total_credito_ing_mac ?? malla.creditos_minimos_ing_mac ?? 0 }}
                                     </div>
                                 </div>
                                 <div class="bg-background/80 p-2 rounded-lg border">
                                     <div class="text-[10px] text-muted-foreground">Horas Totales</div>
                                     <div class="text-base font-bold text-foreground">
-                                        {{ malla.horas_minimas_ing_mac || 5400 }}h
+                                        {{ malla.total_horas_ing_mac ?? malla.horas_minimas_ing_mac ?? 0 }}h
                                     </div>
                                 </div>
                                 <div class="bg-background/80 p-2 rounded-lg border">
-                                    <div class="text-[10px] text-muted-foreground">Materias</div>
+                                    <div class="text-[10px] text-muted-foreground">Unidades</div>
                                     <div class="text-base font-bold text-foreground">
-                                        {{ malla.materias_obligatorias_ing_mac || 38 }}
+                                        {{ malla.total_unidades_ing_mac ?? malla.materias_obligatorias_ing_mac ?? 0 }}
                                     </div>
                                 </div>
                                 <div class="bg-background/80 p-2 rounded-lg border">
                                     <div class="text-[10px] text-muted-foreground">Prosecución</div>
                                     <div class="text-base font-bold text-foreground">
-                                        {{ malla.creditos_minimos_prosecucion_mac || 84 }} UC
+                                        {{ malla.total_credito_prosecucion_mac ?? malla.creditos_minimos_prosecucion_mac ?? 0 }} UC
                                     </div>
                                 </div>
                             </div>
@@ -348,7 +368,9 @@ const totalHoras = computed(() => {
                                         <th class="px-4 py-2.5">Trayecto</th>
                                         <th class="px-4 py-2.5">Eje Curricular</th>
                                         <th class="px-4 py-2.5 text-center">UC</th>
-                                        <th class="px-4 py-2.5 text-center">Horas</th>
+                                        <th class="px-4 py-2.5 text-center">HTE (HEA/HEI)</th>
+                                        <th class="px-4 py-2.5 text-center">Duración</th>
+                                        <th class="px-4 py-2.5 text-center">N.A.</th>
                                         <th class="px-4 py-2.5 text-center">Escala</th>
                                     </tr>
                                 </thead>
@@ -372,7 +394,16 @@ const totalHoras = computed(() => {
                                             {{ det.unidades_credito_mcd ?? '-' }}
                                         </td>
                                         <td class="px-4 py-2.5 text-center text-slate-700 dark:text-slate-300">
-                                            {{ det.thte_mcd ?? '-' }}
+                                            <span class="font-semibold">{{ det.thte_mcd ?? '-' }}h</span>
+                                            <span v-if="det.htea_mcd != null || det.htei_mcd != null" class="text-[11px] text-muted-foreground ml-1">
+                                                ({{ det.htea_mcd ?? 0 }}/{{ det.htei_mcd ?? 0 }})
+                                            </span>
+                                        </td>
+                                        <td class="px-4 py-2.5 text-center text-slate-700 dark:text-slate-300">
+                                            {{ det.duracion_semestres_mcd === 2 ? '2 Sem' : '1 Sem' }}
+                                        </td>
+                                        <td class="px-4 py-2.5 text-center font-semibold text-slate-900 dark:text-slate-100">
+                                            {{ det.nota_minima_aprobatoria_mcd ?? '-' }}
                                         </td>
                                         <td class="px-4 py-2.5 text-center text-slate-700 dark:text-slate-300">
                                             {{ det.escala_medicion?.nombre_esm || 'N/A' }}

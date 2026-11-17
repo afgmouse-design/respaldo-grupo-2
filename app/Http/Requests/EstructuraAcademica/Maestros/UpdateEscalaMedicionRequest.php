@@ -27,18 +27,23 @@ class UpdateEscalaMedicionRequest extends FormRequest
             ?? $this->route('id')
             ?? $this->route('id_esm')
             ?? $this->input('id_esm');
+        if (is_object($id)) {
+            $id = $id->id_esm ?? $id->getKey();
+        }
 
         return [
             'nombre_esm' => [
                 'required',
                 'string',
                 'max:255',
-                Rule::unique('escala_medicion', 'nombre_esm')->ignore($id, 'id_esm'),
+                Rule::unique('escala_medicion', 'nombre_esm')
+                    ->whereNull('deleted_at')
+                    ->ignore($id, 'id_esm'),
             ],
             'nota_aprobatoria_esm' => ['required', 'numeric', 'min:0'],
             'nota_minima_esm'      => ['nullable', 'numeric', 'min:0', 'lte:nota_aprobatoria_esm'],
             'nota_maxima_esm'      => ['nullable', 'numeric', 'gte:nota_aprobatoria_esm'],
-            'status'               => ['nullable', 'boolean'],
+            'status_id'            => ['sometimes', 'integer', 'exists:status,id_sta'],
         ];
     }
 

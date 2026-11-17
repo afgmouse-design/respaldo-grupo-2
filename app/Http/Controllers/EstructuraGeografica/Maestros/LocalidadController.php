@@ -160,12 +160,16 @@ class LocalidadController extends Controller
     }
 
     /**
-     * Realiza la baja lógica de la localidad.
+     * Ejecuta la eliminación lógica en interfaz (`deleted_at` + `status_id = 2`)
+     * sin borrar registros físicos de PostgreSQL.
+     *
+     * Historial:
+     * - 2026-11-16: Reemplazada la mera inactivación (`desactivarConCascada`) por `eliminarConCascada`.
      */
     public function destroy(int $id_loc): RedirectResponse
     {
         try {
-            $resultado = Localidad::desactivarConCascada($id_loc, auth()->id());
+            $resultado = Localidad::eliminarConCascada($id_loc, auth()->id());
 
             return redirect()
                 ->back()

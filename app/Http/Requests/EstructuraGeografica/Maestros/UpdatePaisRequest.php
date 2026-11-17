@@ -53,11 +53,14 @@ class UpdatePaisRequest extends FormRequest
                 'min:2',
                 'max:255',
                 'regex:/^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s\-\']+$/',
-                Rule::unique('pais', 'nombre_pai')->ignore($paisId, 'id_pai'),
+                Rule::unique('pais', 'nombre_pai')
+                    ->whereNull('deleted_at')
+                    ->ignore($paisId, 'id_pai'),
             ],
-            'status' => [
+            'status_id' => [
                 'sometimes',
-                'boolean',
+                'integer',
+                'exists:status,id_sta',
             ],
         ];
     }
@@ -76,7 +79,8 @@ class UpdatePaisRequest extends FormRequest
             'nombre_pai.max'      => 'El nombre del país no puede exceder los 255 caracteres.',
             'nombre_pai.regex'    => 'El nombre del país solo debe contener letras, espacios, guiones o apóstrofes (sin números).',
             'nombre_pai.unique'   => 'Ya existe otro país registrado con ese nombre.',
-            'status.boolean'      => 'El estado debe ser verdadero o falso.',
+            'status_id.integer'   => 'El estatus seleccionado debe ser un identificador entero válido.',
+            'status_id.exists'    => 'El estatus seleccionado no existe en el catálogo del sistema.',
         ];
     }
 }

@@ -44,7 +44,7 @@ class StoreMunicipioRequest extends FormRequest
             'esd_id' => [
                 'required',
                 'integer',
-                'exists:estado,id_esd',
+                Rule::exists('estado', 'id_esd')->whereNull('deleted_at'),
             ],
             'nombre_mun' => [
                 'required',
@@ -53,7 +53,8 @@ class StoreMunicipioRequest extends FormRequest
                 'max:255',
                 'regex:/^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s\-\']+$/',
                 Rule::unique('municipio', 'nombre_mun')->where(function ($query) {
-                    return $query->where('esd_id', $this->input('esd_id'));
+                    return $query->where('esd_id', $this->input('esd_id'))
+                        ->whereNull('deleted_at');
                 }),
             ],
         ];

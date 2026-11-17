@@ -25,7 +25,12 @@ import { Button } from '@/components/ui/button';
 import Badge from '@/components/ui/badge/Badge.vue';
 import DataPagination from '@/components/ui/DataPagination.vue';
 
-interface MallaOpt { id_mac: number; nombre_mac: string; pnf?: { nombre_pnf: string } }
+interface MallaOpt {
+    id_mac: number;
+    nombre_mac: string;
+    programa?: { nombre_prg: string };
+    pnf?: { nombre_pnf: string };
+}
 interface TrayectoOpt { id_tra: number; nombre_tra: string }
 
 const props = defineProps<{
@@ -147,7 +152,7 @@ const imprimir = () => {
                     >
                         <option value="all">Todas las mallas</option>
                         <option v-for="m in props.mallas" :key="m.id_mac" :value="m.id_mac">
-                            {{ m.nombre_mac }} ({{ m.pnf?.nombre_pnf ?? 'Sin PNF' }})
+                            {{ m.nombre_mac }} ({{ m.programa?.nombre_prg ?? m.pnf?.nombre_pnf ?? 'Sin Programa' }})
                         </option>
                     </select>
 
@@ -232,7 +237,7 @@ const imprimir = () => {
                                         {{ d.malla_curricular?.nombre_mac }}
                                     </div>
                                     <div class="text-[11px] text-muted-foreground uppercase">
-                                        {{ d.malla_curricular?.pnf?.nombre_pnf }}
+                                        {{ d.malla_curricular?.programa?.nombre_prg || d.malla_curricular?.pnf?.nombre_pnf }}
                                     </div>
                                 </td>
                                 <td class="px-4 py-3 text-xs">

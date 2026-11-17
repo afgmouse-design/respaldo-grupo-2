@@ -1,13 +1,15 @@
 <?php
 
+/**
+ * Propósito: Valida la creación de un Tipo de Aula (`tipo_aula`).
+ * Historial: Actualizado para respetar SoftDeletes en las reglas de unicidad.
+ */
+
 namespace App\Http\Requests\ProgramacionAcademica\TipoAula;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
-/**
- * Form Request: validación de servidor para crear un Tipo de Aula.
- * La autorización real se aplica en el controlador mediante la Policy.
- */
 class StoreTipoAulaRequest extends FormRequest
 {
     public function authorize(): bool
@@ -18,8 +20,8 @@ class StoreTipoAulaRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'nombre_tia'      => ['required', 'string', 'min:2', 'max:150', 'unique:tipo_aula,nombre_tia'],
-            'codigo_tia'      => ['nullable', 'string', 'max:30', 'unique:tipo_aula,codigo_tia'],
+            'nombre_tia'      => ['required', 'string', 'min:2', 'max:150', Rule::unique('tipo_aula', 'nombre_tia')->whereNull('deleted_at')],
+            'codigo_tia'      => ['nullable', 'string', 'max:30', Rule::unique('tipo_aula', 'codigo_tia')->whereNull('deleted_at')],
             'descripcion_tia' => ['nullable', 'string', 'max:1000'],
         ];
     }
@@ -33,4 +35,3 @@ class StoreTipoAulaRequest extends FormRequest
         ];
     }
 }
-

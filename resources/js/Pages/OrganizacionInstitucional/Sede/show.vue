@@ -7,6 +7,7 @@
  *
  * Historial de Modificaciones:
  * - [Actualización]: Integración del componente `<StatusSwitch>` en el encabezado de la sede.
+ * - [Actualización sogac_mio]: Uso de `condicion_sede`, `status_id` (`@/lib/status`) y `users.username`.
  */
 import { Head, Link, router } from '@inertiajs/vue3';
 import { route } from 'ziggy-js';
@@ -16,6 +17,7 @@ import StatusSwitch from '@/components/ui/StatusSwitch.vue';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import type { BreadcrumbItem } from '@/types/navigation';
 import { useConfirmDialog } from '@/composables/useConfirmDialog';
+import { esActivo } from '@/lib/status';
 import {
     Building,
     ArrowLeft,
@@ -59,13 +61,14 @@ interface LocalidadRelacion {
 }
 
 interface CondicionRelacion {
-    id_cdn: number;
-    nombre_cdn: string;
+    id_cse: number;
+    nombre_cse: string;
 }
 
 interface UserRelacion {
     id: number;
-    name: string;
+    username: string;
+    name?: string;
     email: string;
 }
 
@@ -83,9 +86,11 @@ interface SedeModel {
     fecha_resolucion_sed?: string | null;
     fecha_inicio_sed?: string | null;
     fecha_fin_sed?: string | null;
-    status: boolean;
+    status_id?: number;
+    status?: boolean | number;
     universidad?: UniversidadRelacion | null;
     localidad?: LocalidadRelacion | null;
+    condicion_sede?: CondicionRelacion | null;
     condicion?: CondicionRelacion | null;
     creador?: UserRelacion | null;
     actualizador?: UserRelacion | null;
@@ -127,7 +132,7 @@ const formatDateTime = (isoString?: string | null) => {
 };
 
 const toggleEstatus = async () => {
-    const accion = props.sede.status ? 'desactivar' : 'activar';
+    const accion = esActivo(props.sede) ? 'desactivar' : 'activar';
     if (await confirmDialog(`¿Está seguro de que desea ${accion} la sede "${props.sede.nombre_sed}"?`)) {
         router.patch(route('organizacion.sede.status', props.sede.id_sed), {}, {
             preserveScroll: true,
@@ -153,7 +158,7 @@ const toggleEstatus = async () => {
                         <h1 class="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
                             {{ props.sede.nombre_sed }}
                         </h1>
-                        <StatusSwitch :status="props.sede.status" @toggle="toggleEstatus" />
+                        <StatusSwitch :status="esActivo(props.sede)" @toggle="toggleEstatus" />
                     </div>
                     <p class="text-sm text-muted-foreground ml-10">
                         Ficha descriptiva completa del núcleo o campus universitario.
@@ -172,14 +177,14 @@ const toggleEstatus = async () => {
                         variant="outline"
                         size="sm"
                         :class="[
-                            props.sede.status
+                            esActivo(props.sede)
                                 ? 'text-rose-600 border-rose-200 hover:bg-rose-50'
                                 : 'text-emerald-600 border-emerald-200 hover:bg-emerald-50'
                         ]"
                         @click="toggleEstatus"
                     >
                         <Power class="h-4 w-4 mr-1.5" />
-                        {{ props.sede.status ? 'Desactivar Sede' : 'Activar Sede' }}
+                        {{ esActivo(props.sede) ? 'Desactivar Sede' : 'Activar Sede' }}
                     </Button>
                 </div>
             </div>
@@ -220,7 +225,7 @@ const toggleEstatus = async () => {
                                     <dt class="font-medium text-muted-foreground">Condición / Ámbito</dt>
                                     <dd class="mt-1 text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
                                         <Tag class="h-4 w-4 text-muted-foreground shrink-0" />
-                                        <span>{{ props.sede.condicion?.nombre_cdn ?? 'No especificada' }}</span>
+                                        <span>{{ (props.sede.condicion_sede ?? props.sede.condicion)?.nombre_cse ?? 'No especificada' }}</span>
                                     </dd>
                                 </div>
                                 <div>
@@ -379,7 +384,7 @@ const toggleEstatus = async () => {
                                 <span class="font-medium text-muted-foreground block">Registrado por:</span>
                                 <span class="text-slate-800 dark:text-slate-200 flex items-center gap-1 mt-0.5">
                                     <UserIcon class="h-3.5 w-3.5 text-muted-foreground" />
-                                    {{ props.sede.creador.name }} ({{ props.sede.creador.email }})
+                                    {{ props.sede.creador.username ?? props.sede.creador.name }} ({{ props.sede.creador.email }})
                                 </span>
                             </div>
                             <div v-if="props.sede.updated_at">
@@ -392,7 +397,7 @@ const toggleEstatus = async () => {
                                 <span class="font-medium text-muted-foreground block">Actualizado por:</span>
                                 <span class="text-slate-800 dark:text-slate-200 flex items-center gap-1 mt-0.5">
                                     <UserIcon class="h-3.5 w-3.5 text-muted-foreground" />
-                                    {{ props.sede.actualizador.name }}
+                                    {{ props.sede.actualizador.username ?? props.sede.actualizador.name }}
                                 </span>
                             </div>
                         </CardContent>
